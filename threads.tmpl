@@ -20,6 +20,7 @@ FirstName LastName <email@domain.example>
 >> Please cite any offline or online sources you consulted while
 >> preparing your submission, other than the Pintos documentation, course
 >> text, lecture notes, and course staff.
+Nebenläufige Programmierung (Slides + Script) SS14 at UdS by Hermanns
 
 			     ALARM CLOCK
 			     ===========
@@ -59,20 +60,52 @@ FirstName LastName <email@domain.example>
 
 >> B1: How does your solution guarantee that consumers will hold until
 >> there is something to consume in the buffer?
+The pop method waits if the buffer is empty. It waits on the non_empty condition,
+which is only ever signaled by the put method after it has put something in the buffer.
+Only one consumer is ever woken up, so that the buffer is always non_empty after the
+return from cond_wait. To be sure and to future proove our code we recheck the condition
+anyway in a while loop and re-wait on the same condition if the buffer is empty.
+This way we could also use broadcast instead of signal to wake up threads.
 
 >> B2: How does your solution guarantee that producers will hold until
 >> there is some free space in the buffer?
+Analoge to B1, just with switched pop/put methods and non_empty/non_full conditions.
+
+The put method waits if the buffer is full. It waits on the non_full condition,
+which is only ever signaled by the pop method after it has popped something from the buffer.
+Only one producer is ever woken up, so that the buffer is always non_full after the
+return from cond_wait. To be sure and to future proove our code we recheck the condition
+anyway in a while loop and re-wait on the same condition if the buffer is full.
+This way we could also use broadcast instead of signal to wake up threads.
 
 >> B3: How does your solution preserve a FIFO semantics i.e., the first
 >> character produced will be the first to be consumed?
+We use a ringbuffer `buf` with the pointer `buf_in` and `buf_out`. The pointers
+point to the next place in the buffer to write to or read from. Because they always
+move in the same direction (increasing, wrap aroung to 0 at buffer size) characters
+are read in the same order they were written in, thus preserving the FIFO semantics.
 
 ---- RATIONALE ----
 
 >> B4: Give an intuition for why your program preserves safety.
+Only the access to the variables `buf*` could potentially create race conditions.
+We have three positions, where we access the variables, in producer_consumer, in put,
+and in pop. In producer_consumer only one thread runs at this time, thus no race conditions
+can occur. put and pop are called from producer and consumer which run potentially als multiple
+threads in parallel. Both, put and pop, have lock_acquire as their first call, both on the same lock.
+The access to `buf*` variables in both functions is therefore always protected by the lock and no
+race conditions can occure.
 
 >> B5: Why did you choose this design? Did you consider other design 
 >> alternatives? In what ways is it superior to another design you considered?
+We learned this exact design in NP (see sources on top) so it was the easiest to implement.
+Furthermore, the documentation already contains code for put/pop which it was compared to
+to check for correct implementation of the critical sections.
+http://courses.mpi-sws.org/os-ws15/assignments/pintos/pintos_6.html#SEC101
 
+We did not consider other designs, because it is the most familiar design.
+
+- (no other designs to compare to)
 
 			     NARROW BRIDGE
 			     =============
