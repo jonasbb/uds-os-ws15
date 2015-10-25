@@ -1,0 +1,11 @@
+Car arrv.
+	change direction if
+		all cars on other side have lower priority
+	queue
+
+Car leaves
+	change direction to side with higher priority, do not change on equal priority (do not need to be fair)
+	if direction == own_direction
+		wakeup car from queue (highest priority)
+	else if direction != own_direction && no_car_on_bridge
+		wakeup queue from other side (highest priority)
