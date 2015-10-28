@@ -81,25 +81,62 @@ FirstName LastName <email@domain.example>
 
 >> C1: How does your solution guarantee that no more that 3 vehicles 
 >> are crossing the bridge in the same direction?
+The number of vehicles in the opposite direction must be 0 and the number of
+vehicles in the same direction as the current vehicle must be less than 3.
+This condition must be met for each vehicle in the while loop within arrive_bridge
+to continue. Only after it has left the while loop a thread can exit from
+arrive_bridge.
 
 >> C2: What prevents vehicles from opposite directions from crossing the
 >> bridge simultaneously?
+The number of vehicles in the opposite direction must be 0. This condition
+is checked before leaving arrive_bridge in the while loop.
 
 >> C3: How does your solution grant priority to emergency vehicles over
 >> the queue of vehicles ahead in the same direction?
+Not emergency vehicles will never drive on the bridge if any emergency vehicle is
+waiting. This is checked in the while loop before exiting the arrive_bridge function.
 
 >> C4: How do you guarantee that despite having priority, emergency vehicles
 >> do not start crossing the bridge while there are still vehicles crossing
 >> it in the oposite direction?
+Same as C2. The check does not consider the priority.
 
 >> C5: Explain with examples why your solution does not preserve neither 
 >> fairness nor freedom from starvation, other than what has been indicated 
 >> for emergency vehicles.
+Our implementation never changes the direction if both sides have waiting emergency vehicles.
+So if a stream of emergency vehicles arrives faster than they can cross the bridge neither the
+other side nor normal vehicles in the same direction can ever cross the bridge.
+
+Also, if the stream of emergency vehicles from both sides exceeds the capacity of the bridge, but
+neither stream exceeds the capacity by itself, normal vehicles will also never cross the bridge
+because they must wait till all emergency vehicles have crossed.
+
+Similar, if only normal vehicles arrive at the bridge, faster than they can cross the bridge in this
+direction we will also not change the direction.
+
+We will only ever change direction if one side has emergency vehicles waiting but the other side, in the
+current direction, does not, or if the current side has no vehicles left waiting and the other side any
+vehicles waiting.
 
 ---- RATIONALE ----
 
 >> C6: Why did you choose this design? Did you consider other design 
 >> alternatives? In what ways is it superior to another design you considered?
+We had a design variant with conditions in Nebenläufige Programmierung. We tried to
+build a design similar to this but replacing the conditions with semaphores. One way
+to do this would have been to implement conditions with semaphores, which we though
+of being not the intended solution, so we discarded it. We now use four semaphores,
+one for each direction and priority. This allows us to wake up exactly those threads
+corresponding to vehicles of a particular kind. By intelligently waking up threads,
+meaning only threads which can proceed now and never more than can preceed now simultaniously
+and always wake up the maximal amount of threads which can proceed now to allow the maximal
+throughput.
+
+This design is superiour to our initial implementation design using a single condition
+for all thread in the way that no thread is ever woken up which cannot proceed in the
+current situation.
 
 
 			   SURVEY QUESTIONS
