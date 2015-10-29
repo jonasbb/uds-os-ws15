@@ -32,7 +32,7 @@ static void cross_bridge(int direc, int prio);
 static void exit_bridge(int direc, int prio);
 
 // bridge state
-unsigned int direction = 0;
+int direction = 0;
 unsigned int on_bridge[2] = {0, 0}; // number of vehicles in direction
 unsigned int waiting[2][2] = {{0, 0}, {0, 0}}; // vehicles waiting, with prio
 struct semaphore lock;
@@ -194,7 +194,7 @@ void cross_bridge(UNUSED int direc, UNUSED int prio)
 }
 
 static
-void exit_bridge(int direc, int prio)
+void exit_bridge(int direc, UNUSED int prio)
 {
     // acquire lock
     sema_down(&lock);
@@ -226,13 +226,13 @@ void exit_bridge(int direc, int prio)
         
     int to_wake_up = 3 - on_bridge[direc];
     // wake up prio queues
-    for (int i = 0;
+    for (unsigned int i = 0;
             i < waiting[direction][EMERGENCY] && to_wake_up > 0;
             i++, to_wake_up--) {
         sema_up(&wait_lock[direction][EMERGENCY]);
     }
     // wake up normal ones if space left
-    for (int i = 0;
+    for (unsigned int i = 0;
             i < waiting[direction][NORMAL] && to_wake_up > 0;
             i++, to_wake_up--) {
         sema_up(&wait_lock[direction][NORMAL]);
