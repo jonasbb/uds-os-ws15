@@ -17,8 +17,8 @@ struct timer_thread_wait
     };
 
 /* compare function for sleeping threads to estimate their place in the list */    
-bool thread_wakeup_less(struct list_elem*,
-                        struct list_elem*,
+bool thread_wakeup_less(const struct list_elem*,
+                        const struct list_elem*,
                         void*);
 
 void timer_init (void);

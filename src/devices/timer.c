@@ -35,9 +35,9 @@ static struct list threads_to_wakeup;
 
 /* compare function for sleeping threads to estimate their place in the list */
 bool 
-thread_wakeup_less(struct list_elem *a,
-                   struct list_elem *b,
-                   void *aux) 
+thread_wakeup_less(const struct list_elem *a,
+                   const struct list_elem *b,
+                   UNUSED void *aux) 
 {
   struct timer_thread_wait *t1 = list_entry (a, struct timer_thread_wait, elem);
   struct timer_thread_wait *t2 = list_entry (b, struct timer_thread_wait, elem);
