@@ -3,9 +3,23 @@
 
 #include <round.h>
 #include <stdint.h>
+#include <list.h>
 
 /* Number of timer interrupts per second. */
 #define TIMER_FREQ 100
+
+/* Struct containing thread and the time in ticks where it should wake up */
+struct timer_thread_wait
+    {
+        struct list_elem elem;
+        struct thread* wait_thread;
+        int64_t wakeup_ticks;
+    };
+
+/* compare function for sleeping threads to estimate their place in the list */    
+bool thread_wakeup_less(struct list_elem*,
+                        struct list_elem*,
+                        void*);
 
 void timer_init (void);
 void timer_calibrate (void);
