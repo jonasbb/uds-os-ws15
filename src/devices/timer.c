@@ -116,8 +116,8 @@ timer_sleep (int64_t ticks_to_wait)
   
   /* Add thread to sleeping list and block it */
   struct timer_thread_wait ttw;
-  ttw.wait_thread = thread_current();
   ttw.wakeup_ticks = ticks + ticks_to_wait;
+  ttw.wait_thread = thread_current();
   enum intr_level old_intr = intr_disable();
   list_insert_ordered(&threads_to_wakeup, &ttw.elem,
                       thread_wakeup_less, NULL);

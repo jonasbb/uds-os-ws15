@@ -30,27 +30,79 @@ Nebenläufige Programmierung (Slides + Script) SS14 at UdS by Hermanns
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+# timer.h
+/* Struct containing thread and the time in ticks where it should wake up */
+struct timer_thread_wait
+    {
+        struct list_elem elem;
+        struct thread* wait_thread;
+        int64_t wakeup_ticks;
+    };
+We use a list of thread and a time when they first want to be woken up
+to yield to idle/running threads in between. This is the list element.
+
+# timer.c
+/* list with sleeping threads */
+static struct list threads_to_wakeup;
+This is the variable for the list, described above.
+
+
 ---- ALGORITHMS ----
 
 >> A2: Briefly describe what happens in a call to timer_sleep(),
 >> including the effects of the timer interrupt handler.
+We calculate the time when the thread should continue running as a
+value of `ticks`. The thread is then added to our list (above) of threads
+currently sleeping and put into mode blocked.
+
+In the timer interrupt handler, after the increment of ticks and before
+we may switch to another thread, we wake up (unblock) each thread, which
+wakeup-time is less or equal to our current time, as given by `ticks`.
 
 >> A3: What steps are taken to minimize the amount of time spent in
 >> the timer interrupt handler?
+Our queue is ordered by the wakeup-time. Therefore we can break early in
+checking the list if one wakeup-time is later than our current time.
 
 ---- SYNCHRONIZATION ----
 
 >> A4: How are race conditions avoided when multiple threads call
 >> timer_sleep() simultaneously?
+After initializing our list element we disable interrupts. As specified
+in the documentation for pintos this serializes sheduling until they are
+enabled again. All modifications of the sleep list are done with disabled
+interrupts. We need to disable interrups anyway because thread_block()
+requires disabled interrupts.
 
 >> A5: How are race conditions avoided when a timer interrupt occurs
 >> during a call to timer_sleep()?
+No timer interrupts can occur during the critical section of timer_sleep(),
+because we disabled interrupts for this. The critical section contains all
+modifications of the shared, global sleep list.
 
 ---- RATIONALE ----
 
 >> A6: Why did you choose this design?  In what ways is it superior to
 >> another design you considered?
+Since we are not allowed to call thread_yield multiple times the only solution
+is to block the thread until it should continue running. Therefore, we need a
+list/set of all blocked threads waiting to continue. The kernel lib already
+contains a list implementations so this was the easiest way to implement
+the list.
 
+The only possibility to wake up threads if everything is blocked is the interrupt
+handler or the idle thread. We choose the timer interrupt handler to wake up threads
+since this it the code position where "time" as measured by `ticks` is counted.
+
+We choose to order our list by wake up times so we do not need unnecessary checks
+for thread which are not unblocked.
+
+We looked at already existing synchronization implementations in sync.c but found
+no suitable implementation for our needs. We could use a lock, condition or semaphore
+for each wakeup time, put this would require a huge overhead compared to our solutions.
+Using only one condition to wait for all threads would work, but would require to wake
+up all threads for each tick or at least for each tick where any thread wants to
+continue thus also producing overhead compared to our solution.
 
     		     PROD/CONS
 	  		     =========
