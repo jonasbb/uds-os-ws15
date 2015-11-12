@@ -9,8 +9,8 @@
 #include "lib/user/syscall.h"
 
 static void syscall_handler (struct intr_frame *);
-static void validate_user_string (const char* user_str);
-static void validate_user_buffer (const void* user_buf, unsigned size);
+static void validate_user_string (char* user_str);
+static void validate_user_buffer (void* user_buf, unsigned size);
 static void* uaddr_to_kaddr (const void* uaddr);
 
 void
@@ -92,7 +92,7 @@ close (int fd) {
  * Takes a char* into userspace to validate.
  */
 static void
-validate_user_string (const char* user_str)
+validate_user_string (char* user_str)
 {
   // validate original pointer
   char* kernel = uaddr_to_kaddr(user_str);
@@ -124,7 +124,7 @@ validate_user_string (const char* user_str)
  * The length of the buffer.
  */
 static void
-validate_user_buffer (const void* user_buf, unsigned size)
+validate_user_buffer (void* user_buf, unsigned size)
 {
   // validate original pointer
   uaddr_to_kaddr(user_buf);
@@ -182,21 +182,21 @@ syscall_handler (struct intr_frame *f)
                    break;
     case SYS_CREATE: 
                    ;file_name_uaddr = *((char**) uaddr_to_kaddr(f->esp+4)); /* char pointer in usermode */ 
-                   validate_user_string(exec_name_uaddr);
-                   file_name = (char*) uaddr_to_kaddr(exec_name_uaddr); /* char pointer in kernel mode */
+                   validate_user_string(file_name_uaddr);
+                   file_name = (char*) uaddr_to_kaddr(file_name_uaddr); /* char pointer in kernel mode */
                    size = *((unsigned*) uaddr_to_kaddr(f->esp+8));
                    f->eax = create(file_name, size);
                    break;                /* Create a file. */
     case SYS_REMOVE:
                    file_name_uaddr = *((char**) uaddr_to_kaddr(f->esp+4)); /* char pointer in usermode */ 
-                   validate_user_string(exec_name_uaddr);
-                   file_name = (char*) uaddr_to_kaddr(exec_name_uaddr); /* char pointer in kernel mode */
+                   validate_user_string(file_name_uaddr);
+                   file_name = (char*) uaddr_to_kaddr(file_name_uaddr); /* char pointer in kernel mode */
                    f->eax = remove(file_name);
                    break;                 /* Delete a file. */
     case SYS_OPEN: 
                    file_name_uaddr = *((char**) uaddr_to_kaddr(f->esp+4)); /* char pointer in usermode */ 
-                   validate_user_string(exec_name_uaddr);
-                   file_name = (char*) uaddr_to_kaddr(exec_name_uaddr); /* char pointer in kernel mode */
+                   validate_user_string(file_name_uaddr);
+                   file_name = (char*) uaddr_to_kaddr(file_name_uaddr); /* char pointer in kernel mode */
                    f->eax = open(file_name);
                    break;                  /* Open a file. */
     case SYS_FILESIZE: 
