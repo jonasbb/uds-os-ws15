@@ -1,5 +1,6 @@
 #include "userprog/syscall.h"
 #include <stdio.h>
+#include <stdbool.h>
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
@@ -8,6 +9,9 @@
 #include "lib/user/syscall.h"
 
 static void syscall_handler (struct intr_frame *);
+static void validate_user_string (const char* user_str);
+static void validate_user_buffer (const void* user_buf, unsigned size);
+static void* uaddr_to_kaddr (const void* uaddr);
 
 void
 syscall_init (void) 
@@ -77,7 +81,80 @@ tell (int fd) {
 
 void 
 close (int fd) {
+  return;
+}
 
+/*
+ * Validates that every byte of a user provided char* is
+ * inside the user's mapped memory.
+ * Terminates the user process on address violations.
+ *
+ * Takes a char* into userspace to validate.
+ */
+static void
+validate_user_string (const char* user_str)
+{
+  // validate original pointer
+  char* kernel = uaddr_to_kaddr(user_str);
+  uintptr_t current_page = pg_no(user_str);
+  
+  char* user = user_str;
+  for (;*kernel;)
+  {
+    // move pointers to next char
+    user++;
+    kernel++;
+    
+    // page changed
+    if (pg_no(user) != current_page)
+    {
+      //validate pointer again, because page has changed
+      kernel = uaddr_to_kaddr(user);
+      current_page = pg_no(user);
+    }
+  }
+}
+
+/*
+ * Validates that every byte of a user provided buffer is
+ * inside the user's mapped memory.
+ * Terminates the user process on address violations.
+ *
+ * Takes a void* into userspace to validate.
+ * The length of the buffer.
+ */
+static void
+validate_user_buffer (const void* user_buf, unsigned size)
+{
+  // validate original pointer
+  uaddr_to_kaddr(user_buf);
+  void* user = user_buf;
+  
+  // bytes remaining in page
+  unsigned remaining_bytes = PGSIZE - pg_ofs(user);
+  if (remaining_bytes > size)
+  {
+    // buffer length is longer than the rest of the page
+    size -= remaining_bytes;
+    user += remaining_bytes;
+  }
+  else
+  {
+    // buffer is inside one page, everything is correct
+    return;
+  }
+  
+  // as long as size is at least one page, the buffer reaches
+  // a new page which we have to check also
+  for (; size > PGSIZE;)
+  {
+    // move pointer to next page
+    size -= PGSIZE;
+    user += PGSIZE;
+    
+    // validate pointer
+    uaddr_to_kaddr(user_buf);
+  }
 }
 
 static void
@@ -145,11 +222,10 @@ syscall_handler (struct intr_frame *f)
                    break;                  /* Close a file. */
     default: thread_exit (); break; /* Should not happen */ 
   }
-    
 }
 
-void* 
-uaddr_to_kaddr (void* uaddr) {
+static void* 
+uaddr_to_kaddr (const void* uaddr) {
   if (is_user_vaddr(uaddr)){
     void* page = pagedir_get_page(thread_current()->pagedir, uaddr);
     if (page) {
