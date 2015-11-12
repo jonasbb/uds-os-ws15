@@ -5,6 +5,7 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "userprog/pagedir.h"
+#include "lib/user/syscall.h"
 
 static void syscall_handler (struct intr_frame *);
 
@@ -16,17 +17,17 @@ syscall_init (void)
 
 void
 halt(void) {
-  return;
+
 }
 
 void 
 exit (int status) {
-  return -1;
+
 }
 
 pid_t
 exec(const char *cmd_line) {
-  return;
+  return -1;
 }
 
 int 
@@ -50,7 +51,9 @@ open (const char *file) {
 }
 
 int 
-filesize (int fd)
+filesize (int fd) {
+  return -1;
+}
 
 int 
 read (int fd, void *buffer, uint32_t size) {
@@ -64,7 +67,7 @@ write (int fd, const void *buffer, uint32_t size) {
 
 void 
 seek (int fd, uint32_t position) {
-  return;
+
 }
 
 uint32_t 
@@ -74,7 +77,7 @@ tell (int fd) {
 
 void 
 close (int fd) {
-  return;
+
 }
 
 static void
@@ -97,7 +100,7 @@ syscall_handler (struct intr_frame *f)
                    break;
     case SYS_CREATE: 
                    ;char* file_name_uaddr = *((char**) uaddr_to_kaddr(f->esp+4)); /* char pointer in usermode */ 
-                   char* file_name = (char*) uaddr_to_kaddr(exec_name_uaddr); /* char pointer in kernel mode */
+                   char* file_name = (char*) uaddr_to_kaddr(file_name_uaddr); /* char pointer in kernel mode */
                    uint32_t initial_size = *((uint32_t*) uaddr_to_kaddr(f->esp+8));
                    f->eax = create(file_name, initial_size);
                    break;                /* Create a file. */
