@@ -160,64 +160,76 @@ validate_user_buffer (const void* user_buf, unsigned size)
 static void
 syscall_handler (struct intr_frame *f) 
 {
+  void *buffer_user, *buffer_kernel;
+  char *file_name, *file_name_uaddr, *exec_name, *exec_name_uaddr ;
+  unsigned size, position;
+  int status, pid, fd;
   printf ("system call!\n");
 
   uint32_t syscall_nr = *((uint32_t*) uaddr_to_kaddr(f->esp));
   
   switch (syscall_nr) {
     case SYS_HALT: halt(); break;                  /* Halt the operating system. */
-    case SYS_EXIT: ;int status = *((uint32_t*) uaddr_to_kaddr(f->esp+4));
+    case SYS_EXIT: ;status = *((int*) uaddr_to_kaddr(f->esp+4));
                    exit(status); break;                  /* Terminate this process. */
-    case SYS_EXEC: ;char* exec_name_uaddr = *((char**) uaddr_to_kaddr(f->esp+4)); /* char pointer in usermode */ 
-                   char* exec_name = (char*) uaddr_to_kaddr(exec_name_uaddr); /* char pointer in kernel mode */
+    case SYS_EXEC: ;exec_name_uaddr = *((char**) uaddr_to_kaddr(f->esp+4)); /* char pointer in usermode */ 
+                   validate_user_string(exec_name_uaddr);
+                   exec_name = (char*) uaddr_to_kaddr(exec_name_uaddr); /* char pointer in kernel mode */
                    f->eax = exec(exec_name);
                    break; /* Start another process. */
-    case SYS_WAIT: ;int pid = *((uint32_t*) uaddr_to_kaddr(f->esp+4));
+    case SYS_WAIT: ;pid = *((int*) uaddr_to_kaddr(f->esp+4));
                    f->eax = wait(pid);  /* Wait for a child process to die. */
                    break;
     case SYS_CREATE: 
-                   ;char* file_name_uaddr = *((char**) uaddr_to_kaddr(f->esp+4)); /* char pointer in usermode */ 
-                   char* file_name = (char*) uaddr_to_kaddr(file_name_uaddr); /* char pointer in kernel mode */
-                   uint32_t initial_size = *((uint32_t*) uaddr_to_kaddr(f->esp+8));
-                   f->eax = create(file_name, initial_size);
+                   ;file_name_uaddr = *((char**) uaddr_to_kaddr(f->esp+4)); /* char pointer in usermode */ 
+                   validate_user_string(exec_name_uaddr);
+                   file_name = (char*) uaddr_to_kaddr(exec_name_uaddr); /* char pointer in kernel mode */
+                   size = *((unsigned*) uaddr_to_kaddr(f->esp+8));
+                   f->eax = create(file_name, size);
                    break;                /* Create a file. */
     case SYS_REMOVE:
                    file_name_uaddr = *((char**) uaddr_to_kaddr(f->esp+4)); /* char pointer in usermode */ 
+                   validate_user_string(exec_name_uaddr);
                    file_name = (char*) uaddr_to_kaddr(exec_name_uaddr); /* char pointer in kernel mode */
                    f->eax = remove(file_name);
                    break;                 /* Delete a file. */
     case SYS_OPEN: 
                    file_name_uaddr = *((char**) uaddr_to_kaddr(f->esp+4)); /* char pointer in usermode */ 
+                   validate_user_string(exec_name_uaddr);
                    file_name = (char*) uaddr_to_kaddr(exec_name_uaddr); /* char pointer in kernel mode */
                    f->eax = open(file_name);
                    break;                  /* Open a file. */
     case SYS_FILESIZE: 
-                   ;int fd = *((uint32_t*) uaddr_to_kaddr(f->esp+4));
+                   ;fd = *((int*) uaddr_to_kaddr(f->esp+4));
                    f->eax = filesize(fd);
                    break;              /* Obtain a file's size. */
     case SYS_READ: 
-                   fd = *((uint32_t*) uaddr_to_kaddr(f->esp+4));
-                   void* buffer;
-                   uint32_t size;
-                   f->eax = read(fd, buffer, size);
+                   fd = *((int*) uaddr_to_kaddr(f->esp+4));
+                   buffer_user = *((void**)uaddr_to_kaddr(f->esp+8)); /* void* in user mode */
+                   size = *((unsigned *)uaddr_to_kaddr(f->esp+12));
+                   validate_user_buffer(buffer_user, size); /* validates user input */
+                   buffer_kernel = uaddr_to_kaddr(buffer_user); /* void* in kernel mode */
+                   f->eax = read(fd, buffer_kernel, size);
                    break;    /* Read from a file. */
     case SYS_WRITE:
-                   fd = *((uint32_t*) uaddr_to_kaddr(f->esp+4));
-                   buffer;
-                   //size;
-                   f->eax = write(fd, buffer, size);
+                   fd = *((int*) uaddr_to_kaddr(f->esp+4));
+                   buffer_user = *((void**)uaddr_to_kaddr(f->esp+8)); /* void* in user mode */
+                   size = *((unsigned *)uaddr_to_kaddr(f->esp+12));
+                   validate_user_buffer(buffer_user, size); /* validates user input */
+                   buffer_kernel = uaddr_to_kaddr(buffer_user); /* void* in kernel mode */
+                   f->eax = write(fd, buffer_kernel, size);
                    break;                  /* Write to a file. */
     case SYS_SEEK: 
-                   fd = *((uint32_t*) uaddr_to_kaddr(f->esp+4));
-                   uint32_t position = *((uint32_t*) uaddr_to_kaddr(f->esp+8));
+                   fd = *((int*) uaddr_to_kaddr(f->esp+4));
+                   position = *((unsigned*) uaddr_to_kaddr(f->esp+8));
                    seek(fd,position); 
                    break;  /* Change position in a file. */
     case SYS_TELL: 
-                   fd = *((uint32_t*) uaddr_to_kaddr(f->esp+4));
+                   fd = *((int*) uaddr_to_kaddr(f->esp+4));
                    f->eax = tell(fd);
                    break;                  /* Report current position in a file. */
     case SYS_CLOSE:
-                   fd = *((uint32_t*) uaddr_to_kaddr(f->esp+4));
+                   fd = *((int*) uaddr_to_kaddr(f->esp+4));
                    close(fd); 
                    break;                  /* Close a file. */
     default: thread_exit (); break; /* Should not happen */ 
