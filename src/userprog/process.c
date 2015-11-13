@@ -26,7 +26,7 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
 tid_t
-process_execute (const char *file_name) 
+process_execute (const char *cmdline)
 {
   char *fn_copy;
   tid_t tid;
@@ -36,10 +36,10 @@ process_execute (const char *file_name)
   fn_copy = palloc_get_page (0);
   if (fn_copy == NULL)
     return TID_ERROR;
-  strlcpy (fn_copy, file_name, PGSIZE);
+  strlcpy (fn_copy, cmdline, PGSIZE);
 
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (cmdline, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
   return tid;
@@ -48,9 +48,9 @@ process_execute (const char *file_name)
 /* A thread function that loads a user process and starts it
    running. */
 static void
-start_process (void *file_name_)
+start_process (void *cmdline_)
 {
-  char *file_name = file_name_;
+  char *cmdline = cmdline_;
   struct intr_frame if_;
   bool success;
 
@@ -59,10 +59,10 @@ start_process (void *file_name_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
+  success = load (cmdline, &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
-  palloc_free_page (file_name);
+  palloc_free_page (cmdline);
   if (!success) 
     thread_exit ();
 
@@ -196,7 +196,7 @@ struct Elf32_Phdr
 #define PF_W 2          /* Writable. */
 #define PF_R 4          /* Readable. */
 
-static bool setup_stack (void **esp);
+static bool setup_stack (void **esp, char *cmdline);
 static bool validate_segment (const struct Elf32_Phdr *, struct file *);
 static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
                           uint32_t read_bytes, uint32_t zero_bytes,
@@ -207,7 +207,7 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
    and its initial stack pointer into *ESP.
    Returns true if successful, false otherwise. */
 bool
-load (const char *file_name, void (**eip) (void), void **esp) 
+load (const char *cmdline, void (**eip) (void), void **esp) 
 {
   struct thread *t = thread_current ();
   struct Elf32_Ehdr ehdr;
@@ -215,6 +215,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   off_t file_ofs;
   bool success = false;
   int i;
+  char **save_ptr;
 
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
@@ -223,10 +224,11 @@ load (const char *file_name, void (**eip) (void), void **esp)
   process_activate ();
 
   /* Open executable file. */
-  file = filesys_open (file_name);
+  strtok_r(cmdline, " ", save_ptr); /* terminate the filename with \n */
+  file = filesys_open (cmdline);
   if (file == NULL) 
     {
-      printf ("load: %s: open failed\n", file_name);
+      printf ("load: %s: open failed\n", cmdline);
       goto done; 
     }
 
@@ -239,7 +241,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
       || ehdr.e_phentsize != sizeof (struct Elf32_Phdr)
       || ehdr.e_phnum > 1024) 
     {
-      printf ("load: %s: error loading executable\n", file_name);
+      printf ("load: %s: error loading executable\n", cmdline);
       goto done; 
     }
 
@@ -303,7 +305,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
     }
 
   /* Set up stack. */
-  if (!setup_stack (esp))
+  if (!setup_stack (esp, cmdline, save_ptr))
     goto done;
 
   /* Start address. */
@@ -428,7 +430,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
 static bool
-setup_stack (void **esp) 
+setup_stack (void **esp, char *cmdline, char **save_ptr) 
 {
   uint8_t *kpage;
   bool success = false;
