@@ -65,8 +65,14 @@ read (int fd, void *buffer, unsigned size) {
 }
 
 int 
-  return -1;
 write (int fd, const void *buffer, unsigned size) {
+  if (fd == 1)
+  {
+    // TODO long buffer could be split (multiple megabytes)
+    putbuf(buffer, size);
+    return size;
+  } else
+    return -1;
 }
 
 void 
