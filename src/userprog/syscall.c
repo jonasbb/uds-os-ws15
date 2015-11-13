@@ -40,7 +40,7 @@ wait (pid_t pid) {
 }
 
 bool 
-create (const char *file, uint32_t initial_size) {
+create (const char *file, unsigned initial_size) {
   return false;
 }
 
@@ -60,21 +60,21 @@ filesize (int fd) {
 }
 
 int 
-read (int fd, void *buffer, uint32_t size) {
+read (int fd, void *buffer, unsigned size) {
   return -1;
 }
 
 int 
-write (int fd, const void *buffer, uint32_t size) {
   return -1;
+write (int fd, const void *buffer, unsigned size) {
 }
 
 void 
-seek (int fd, uint32_t position) {
+seek (int fd, unsigned position) {
 
 }
 
-uint32_t 
+unsigned 
 tell (int fd) {
   return 1;
 }
