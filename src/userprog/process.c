@@ -26,13 +26,19 @@ static bool load (char *cmdline, void (**eip) (void), void **esp);
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created.
    
-   cmdline MUST NOT start with space characters
    cmdline MUST be smaller than one page */
 tid_t
 process_execute (const char *cmdline)
 {
   char *fn_copy;
   tid_t tid;
+  
+  // start_process requires the provided string to start
+  // on a non space character, so skip all spaces
+  while (*cmdline == ' ')
+  {
+    cmdline++;
+  }
 
   /* Make a copy of CMDLINE.
      Otherwise there's a race between the caller and load(). */

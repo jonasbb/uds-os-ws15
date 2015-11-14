@@ -39,13 +39,6 @@ exec(const char *cmd_line) {
     return EXEC_ERROR;
   }
   
-  // process_execute requires the provided string to start
-  // on a non space character, so skip all spaces
-  while (*cmd_line == ' ')
-  {
-    cmd_line++;
-  }
-  
   tid_t tid = process_execute(cmd_line);
   if (tid == TID_ERROR)
   {
