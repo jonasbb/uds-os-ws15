@@ -122,12 +122,16 @@ close (int fd) {
 static void
 validate_user_string (char* user_str)
 {
+  ASSERT(user_str != NULL)
+  
   // validate original pointer
   char* kernel = uaddr_to_kaddr(user_str);
   uintptr_t current_page = pg_no(user_str);
   
   char* user = user_str;
-  for (;*kernel;)
+  
+  ASSERT(kernel != NULL);
+  while (printf("DEBUG: %p\n", kernel) && *kernel)
   {
     // move pointers to next char
     user++;
@@ -140,6 +144,7 @@ validate_user_string (char* user_str)
       kernel = uaddr_to_kaddr(user);
       current_page = pg_no(user);
     }
+    ASSERT(kernel != NULL);
   }
 }
 
@@ -154,6 +159,8 @@ validate_user_string (char* user_str)
 static void
 validate_user_buffer (void* user_buf, unsigned size)
 {
+  ASSERT(user_buf != NULL)
+  
   // validate original pointer
   uaddr_to_kaddr(user_buf);
   void* user = user_buf;
@@ -192,15 +199,25 @@ syscall_handler (struct intr_frame *f)
   char *file_name, *file_name_uaddr, *exec_name, *exec_name_uaddr ;
   unsigned size, position;
   int status, pid, fd;
-  printf ("system call!\n");
 
   uint32_t syscall_nr = *((uint32_t*) uaddr_to_kaddr(f->esp));
+  printf("Syscall number: trivial (%08x) real (%08x)\n", *((uint32_t*)f->esp), syscall_nr);
+  printf("HALT: %d\nEXIT: %d\nEXEC: %d\n", SYS_HALT, SYS_EXIT, SYS_EXEC);
   
+                   ASSERT(syscall_nr != 2);
   switch (syscall_nr) {
-    case SYS_HALT: halt(); break;                  /* Halt the operating system. */
-    case SYS_EXIT: ;status = *((int*) uaddr_to_kaddr(f->esp+4));
-                   exit(status); break;                  /* Terminate this process. */
-    case SYS_EXEC: ;exec_name_uaddr = *((char**) uaddr_to_kaddr(f->esp+4)); /* char pointer in usermode */ 
+    case SYS_HALT: halt();
+                   while(1);
+                   break;                  /* Halt the operating system. */
+    case SYS_EXIT: status = *((int*) uaddr_to_kaddr(f->esp+4));
+                   exit(status);
+                   while(1);
+                   break;                  /* Terminate this process. */
+    case SYS_EXEC: exec_name_uaddr = *((char**) uaddr_to_kaddr(f->esp+4)); /* char pointer in usermode */ 
+                   printf("Syscall number: trivial (%08x) real (%08x)\n", *((uint32_t*)f->esp), syscall_nr);
+  hex_dump(f->esp, f->esp, 0x60, true);  
+                   printf("exec: %08x, %08x, %08x\n", f->esp+4, *((char**)f->esp+4), uaddr_to_kaddr(f->esp+4));
+                   ASSERT(exec_name_uaddr != NULL);
                    validate_user_string(exec_name_uaddr);
                    exec_name = (char*) uaddr_to_kaddr(exec_name_uaddr); /* char pointer in kernel mode */
                    f->eax = exec(exec_name);
@@ -210,6 +227,7 @@ syscall_handler (struct intr_frame *f)
                    break;
     case SYS_CREATE: 
                    ;file_name_uaddr = *((char**) uaddr_to_kaddr(f->esp+4)); /* char pointer in usermode */ 
+                   ASSERT(file_name_uaddr != NULL);
                    validate_user_string(file_name_uaddr);
                    file_name = (char*) uaddr_to_kaddr(file_name_uaddr); /* char pointer in kernel mode */
                    size = *((unsigned*) uaddr_to_kaddr(f->esp+8));
@@ -217,12 +235,14 @@ syscall_handler (struct intr_frame *f)
                    break;                /* Create a file. */
     case SYS_REMOVE:
                    file_name_uaddr = *((char**) uaddr_to_kaddr(f->esp+4)); /* char pointer in usermode */ 
+                   ASSERT(file_name_uaddr != NULL);
                    validate_user_string(file_name_uaddr);
                    file_name = (char*) uaddr_to_kaddr(file_name_uaddr); /* char pointer in kernel mode */
                    f->eax = remove(file_name);
                    break;                 /* Delete a file. */
     case SYS_OPEN: 
                    file_name_uaddr = *((char**) uaddr_to_kaddr(f->esp+4)); /* char pointer in usermode */ 
+                   ASSERT(file_name_uaddr != NULL);
                    validate_user_string(file_name_uaddr);
                    file_name = (char*) uaddr_to_kaddr(file_name_uaddr); /* char pointer in kernel mode */
                    f->eax = open(file_name);
@@ -269,7 +289,7 @@ uaddr_to_kaddr (const void* uaddr) {
   if (is_user_vaddr(uaddr)){
     void* page = pagedir_get_page(thread_current()->pagedir, uaddr);
     if (page) {
-      return page;
+      return uaddr;
     } 
     else {
       exit(-1); /* address violation */
