@@ -19,26 +19,29 @@
 #include "threads/vaddr.h"
 
 static thread_func start_process NO_RETURN;
-static bool load (const char *cmdline, void (**eip) (void), void **esp);
+static bool load (char *cmdline, void (**eip) (void), void **esp);
 
 /* Starts a new thread running a user program loaded from
-   FILENAME.  The new thread may be scheduled (and may even exit)
+   CMDLINE.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
-   thread id, or TID_ERROR if the thread cannot be created. */
+   thread id, or TID_ERROR if the thread cannot be created.
+   
+   cmdline MUST NOT start with space characters
+   cmdline MUST be smaller than one page */
 tid_t
 process_execute (const char *cmdline)
 {
   char *fn_copy;
   tid_t tid;
 
-  /* Make a copy of FILE_NAME.
+  /* Make a copy of CMDLINE.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
   if (fn_copy == NULL)
     return TID_ERROR;
   strlcpy (fn_copy, cmdline, PGSIZE);
 
-  /* Create a new thread to execute FILE_NAME. */
+  /* Create a new thread to execute CMDLINE. */
   tid = thread_create (cmdline, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
@@ -63,8 +66,10 @@ start_process (void *cmdline_)
 
   /* If load failed, quit. */
   palloc_free_page (cmdline);
-  if (!success) 
+  if (!success)
     thread_exit ();
+  //printf("MY DEBUG");
+  //while(1);
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -196,7 +201,7 @@ struct Elf32_Phdr
 #define PF_W 2          /* Writable. */
 #define PF_R 4          /* Readable. */
 
-static bool setup_stack (void **esp, char *cmdline);
+static bool setup_stack (void **esp, char *cmdline, char **save_ptr);
 static bool validate_segment (const struct Elf32_Phdr *, struct file *);
 static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
                           uint32_t read_bytes, uint32_t zero_bytes,
@@ -207,7 +212,7 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
    and its initial stack pointer into *ESP.
    Returns true if successful, false otherwise. */
 bool
-load (const char *cmdline, void (**eip) (void), void **esp) 
+load (char *cmdline, void (**eip) (void), void **esp) 
 {
   struct thread *t = thread_current ();
   struct Elf32_Ehdr ehdr;
@@ -215,7 +220,7 @@ load (const char *cmdline, void (**eip) (void), void **esp)
   off_t file_ofs;
   bool success = false;
   int i;
-  char **save_ptr;
+  char *save_ptr = NULL;
 
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
@@ -224,7 +229,7 @@ load (const char *cmdline, void (**eip) (void), void **esp)
   process_activate ();
 
   /* Open executable file. */
-  strtok_r(cmdline, " ", save_ptr); /* terminate the filename with \n */
+  strtok_r(cmdline, " ", &save_ptr); /* terminate the filename with \n */
   file = filesys_open (cmdline);
   if (file == NULL) 
     {
@@ -305,7 +310,7 @@ load (const char *cmdline, void (**eip) (void), void **esp)
     }
 
   /* Set up stack. */
-  if (!setup_stack (esp, cmdline, save_ptr))
+  if (!setup_stack (esp, cmdline, &save_ptr))
     goto done;
 
   /* Start address. */
@@ -430,20 +435,93 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
 static bool
-setup_stack (void **esp, char *cmdline, char **save_ptr) 
+setup_stack (void **esp_, char *cmdline_, char **save_ptr) 
 {
+  ASSERT(save_ptr != NULL);
+  
   uint8_t *kpage;
   bool success = false;
 
-  kpage = palloc_get_page (PAL_USER | PAL_ZERO);
+  kpage = palloc_get_multiple (PAL_USER | PAL_ZERO, 2);
   if (kpage != NULL) 
     {
-      success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
+      success = install_page (((uint8_t *) PHYS_BASE) - 2*PGSIZE, kpage, true)
+             && install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage + PGSIZE, true);
       if (success)
-        // create a wrong fake callstack
-        *esp = PHYS_BASE - 12;
+      {
+        // copy argument to upper page
+        memcpy(kpage + PGSIZE, cmdline_, PGSIZE);
+        char *cmdline = (char*)((uint8_t *) PHYS_BASE) - PGSIZE; /* nice pointer to work with */
+        // since cmdline_ starts at a page save_ptr can be used
+        // if we replace the page part but not the offset
+        *save_ptr = cmdline + pg_ofs(*save_ptr);
+        
+        // we already called strtok_r one time, to terminate the filename
+        // because filename must be at the start at the cmdline string
+        // no leading spaces, the pointer to cmdline is also our first token.
+        // The rest of the tokens can be aquired by additional calls to strtok_r
+        
+        uint32_t *esp_start, *esp_end, *esp;
+        uint32_t argc = 0;
+        esp = *esp_;
+        esp = PHYS_BASE;
+        
+#define PUSH(PTR, VAL) PTR -= 1; *PTR = VAL;
+        // first argument on the stack is a pointer to the page we also need to free
+        // because it contains our argc values
+        PUSH(esp, (uint32_t) cmdline);
+
+        // NULL pointer to terminate the argv list
+        PUSH(esp, (uint32_t) NULL);
+        // push first token
+        PUSH(esp, cmdline);
+        argc++;
+        //DEBUG printf("ArgN: %2d\tADDR: %p\tESP: %p\n", argc, cmdline, esp);
+        esp_start = esp;
+        
+        char *token;
+        // push char* from left to right onto the stack
+        while ((token = strtok_r(NULL, " ", save_ptr)) != NULL)
+        {
+          PUSH(esp, token);
+          argc++;
+          //DEBUG printf("ArgN: %2d\tADDR: %p\tESP: %p\n", argc, token, esp);
+        }
+        esp_end = esp;
+        
+        // we need to reorder the pushed char* so that they are ordered from
+        // right to left on the stack
+        while (esp_start > esp_end)
+        {
+          // save value and swap values
+          uint32_t tmp = *esp_start;
+          *esp_start = *esp_end;
+          *esp_end = tmp;
+          
+          // move pointers
+          esp_start--;
+          esp_end++;
+        }
+        //DEBUG printf("%p -- %p\n", esp_start, esp_end);
+        
+        // push argv itself (char**)
+        esp_end = esp;
+        PUSH(esp, esp_end);
+        
+        // push argc value
+        PUSH(esp, argc);
+        // saved instruction pointer
+        PUSH(esp, (uint32_t) NULL);
+        
+        *esp_ = esp;
+        //DEBUG hex_dump(cmdline, cmdline, 0x20, true);
+        //DEBUG hex_dump(esp-0x15, esp-0x15, 0x80, true);        
+      }
       else
+      {
         palloc_free_page (kpage);
+        palloc_free_page (kpage + PGSIZE);
+      }
     }
   return success;
 }

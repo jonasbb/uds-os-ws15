@@ -31,7 +31,29 @@ exit (int status) {
 
 pid_t
 exec(const char *cmd_line) {
-  return -1;
+#define EXEC_ERROR ((pid_t) -1)
+  // we are allowed to impose a reasonable limit on argument data
+  // the documentations mentions one page
+  if (strlen(cmd_line) > PGSIZE - 1) // -1 null byte
+  {
+    return EXEC_ERROR;
+  }
+  
+  // process_execute requires the provided string to start
+  // on a non space character, so skip all spaces
+  while (*cmd_line == ' ')
+  {
+    cmd_line++;
+  }
+  
+  tid_t tid = process_execute(cmd_line);
+  if (tid == TID_ERROR)
+  {
+    return EXEC_ERROR;
+  }
+  
+  // child started with pid
+  return (pid_t) tid;
 }
 
 int 
