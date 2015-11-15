@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <syscall-nr.h>
+#include "devices/shutdown.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
@@ -19,9 +20,9 @@ syscall_init (void)
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
-void
+void NO_RETURN
 halt(void) {
-
+  shutdown_power_off();
 }
 
 void 
