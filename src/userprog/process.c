@@ -18,6 +18,7 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "threads/synch.h"
+#include "threads/malloc.h"
 #include "lib/kernel/list.h"
 #include "lib/user/syscall.h"
 
@@ -133,7 +134,7 @@ clear_process_state_(pid_t pid, bool init_list)
   
   // list manipulation is ok, because lock is held
   process_states[pid].tid = 0;
-  process_states[pid].parent_pid = 0;
+  process_states[pid].parent_pid = PID_ERROR;
   process_states[pid].status = PROCESS_UNUSED;
   process_states[pid].exit_status_value = PROCESS_NO_EXIT_STATUS;
   process_states[pid].wait_for_child = 0;
@@ -179,8 +180,8 @@ process_init(void)
 pid_t
 process_execute (const char *cmdline)
 {
-  printf("@@@ process_execute called @@@\n");
-  char *fn_copy;
+  log_debug("@@@ process_execute called @@@\n");
+  char *fn_copy, *save_ptr, thread_name[16];
   tid_t tid;
   pid_t pid, parent_pid = thread_current()->pid;
   struct start_process_param *param;
@@ -225,6 +226,7 @@ process_execute (const char *cmdline)
   // aquire memory for list entry
   struct pid_item *e = malloc(sizeof(struct pid_item));
   e->pid = pid;
+  // TODO must be pushed sorted
   list_push_front(&(process_states[parent_pid].to_wait_on_list), e);
   lock_release(&pid_lock);
   
@@ -295,15 +297,14 @@ start_process (void *args)
 int
 process_wait (pid_t child_pid) 
 {
-  printf("@@@ process_wait called @@@\n");
+  log_debug("@@@ process_wait called @@@\n");
   // pid of calling process
   pid_t pid = thread_current()->pid;
-  printf("+++ pid %d +++\n", pid);
+  log_debug("+++ pid %d +++\n", pid);
   bool may_wait = false;
   int res = -1;
   
   lock_acquire(&pid_lock);
-  // TODO
   // process state of pid must contain child_pid
   // if not return -1
   // if child not zombie
@@ -318,7 +319,7 @@ process_wait (pid_t child_pid)
   {
     struct pid_item *pid_i = list_entry (e, struct pid_item, elem);
     
-    printf("+++ (%d) may wait on pid: %d +++\n", pid, pid_i->pid);
+    log_debug("+++ (%d) may wait on pid: %d +++\n", pid, pid_i->pid);
     
     if (pid_i->pid == child_pid)
     {
@@ -327,20 +328,20 @@ process_wait (pid_t child_pid)
     }
   }
   
-  printf("@@@ may_wait %d @@@\n", may_wait);
+  log_debug("@@@ may_wait %d @@@\n", may_wait);
   // valid child
   if (may_wait)
   {
     // wait till child process becomes a zombie
     while (process_states[child_pid].status != PROCESS_ZOMBIE)
     {
-      printf("--- (%d) waits on cond for child %d ---\n", pid, child_pid);
+      log_debug("--- (%d) waits on cond for child %d ---\n", pid, child_pid);
       // wait till the next process exits
       // could be our child, so recheck condition
       cond_wait(&process_exit_cond, &pid_lock);
-      printf("--- (%d) continues on cond for child %d ---\n", pid, child_pid);
+      log_debug("--- (%d) continues on  cond for child %d ---\n", pid, child_pid);
     }
-    printf("--- (%d) child %d now zombie ---\n", pid, child_pid);
+    log_debug("--- (%d) child %d now zombie ---\n", pid, child_pid);
     // remove posibility to wait for child a second time
     list_remove(e);
     free(e);
@@ -350,20 +351,63 @@ process_wait (pid_t child_pid)
   }
   
   lock_release(&pid_lock);
-  printf("exit process_wait with return value %d\n", res);
+  log_debug("exit process_wait with return value %d\n", res);
   return res;
 }
 
-// TODO check if we this should be thread_exit rather
+/* Sets a exit status code and handles the process_state structure update.
+   Afterwards thread_exit() is called, so it does not return.
+ */
 void NO_RETURN
 process_exit_with_value (int exit_value)
 {
-  pid_t pid = thread_current()->pid;
-  printf("@@@ process_exit_with_value called (%d), %d @@@\n", pid, exit_value);
+  struct thread *cur = thread_current ();
+  pid_t pid = cur->pid;
+  
+  log_debug("@@@ (%d) process_exit_with_value called %d @@@\n", pid, exit_value);
   
   lock_acquire(&pid_lock);
-  process_states[pid].status = PROCESS_ZOMBIE;
-  process_states[pid].exit_status_value = exit_value;
+  // remove all child zombies
+  // remove parent from rest of childs
+  //
+  // signal_all condition
+  
+  // remove all child zombies
+  // remove parent from rest of childs
+  struct list_elem *e;
+  for (e = list_begin (&(process_states[cur->pid].to_wait_on_list));
+       e != list_end (&(process_states[cur->pid].to_wait_on_list));
+       e = list_next (e))
+  {
+    struct pid_item *pid_i = list_entry (e, struct pid_item, elem);
+    
+    // remove old zombie processes
+    if (process_states[pid_i->pid].status == PROCESS_ZOMBIE)
+    {
+      clear_process_state(pid_i->pid);
+    }
+    else
+    {
+      // remove us as parent, so that those processes will not wait on us
+      process_states[pid_i->pid].parent_pid = PID_ERROR;
+    }
+  }
+  
+  // if we have a parent the process must persist until a possible later call to wait
+  // else we can remove it now
+  if (process_states[pid].parent_pid != PID_ERROR)
+  {
+    process_states[pid].status = PROCESS_ZOMBIE;
+    process_states[pid].exit_status_value = exit_value;
+  
+    // only if we have a parent any process could wait on us
+    log_debug("--- Signal condition due to process %d ---\n", cur->pid);
+    cond_broadcast(&process_exit_cond, &pid_lock);
+  }
+  else
+  {
+    clear_process_state(pid);
+  }
   lock_release(&pid_lock);
   
   thread_exit();
@@ -373,22 +417,9 @@ process_exit_with_value (int exit_value)
 void
 process_exit (void)
 {
-  printf("@@@ process_exit called @@@\n");
+  log_debug("@@@ process_exit called @@@\n");
   struct thread *cur = thread_current ();
   uint32_t *pd;
-  
-  // TODO
-  // remove all child zombies
-  // clear the rest of the list
-  //
-  // set exit code
-  // set to zombie
-  //
-  // signal_all condition
-  lock_acquire(&pid_lock);
-  printf("--- Signal condition due to process %d ---\n", cur->pid);
-  cond_broadcast(&process_exit_cond, &pid_lock);
-  lock_release(&pid_lock);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -762,7 +793,7 @@ setup_stack (void **esp_, char *cmdline_, char **save_ptr)
         // push first token
         PUSH(esp, cmdline);
         argc++;
-        //DEBUG printf("ArgN: %2d\tADDR: %p\tESP: %p\n", argc, cmdline, esp);
+        //DEBUG log_debug("ArgN: %2d\tADDR: %p\tESP: %p\n", argc, cmdline, esp);
         esp_start = esp;
         
         char *token;
@@ -771,7 +802,7 @@ setup_stack (void **esp_, char *cmdline_, char **save_ptr)
         {
           PUSH(esp, token);
           argc++;
-          //DEBUG printf("ArgN: %2d\tADDR: %p\tESP: %p\n", argc, token, esp);
+          //DEBUG log_debug("ArgN: %2d\tADDR: %p\tESP: %p\n", argc, token, esp);
         }
         esp_end = esp;
         
@@ -788,7 +819,7 @@ setup_stack (void **esp_, char *cmdline_, char **save_ptr)
           esp_start--;
           esp_end++;
         }
-        //DEBUG printf("%p -- %p\n", esp_start, esp_end);
+        //DEBUG log_debug("%p -- %p\n", esp_start, esp_end);
         
         // push argv itself (char**)
         esp_end = esp;

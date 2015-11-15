@@ -121,3 +121,14 @@ debug_backtrace_all (void)
   thread_foreach (print_stacktrace, 0);
   intr_set_level (oldlevel);
 }
+
+void
+log_debug(const char *format, ...)
+{
+  va_list args;
+  va_start (args, format);
+#ifndef NDEBUG
+//  printf (format, args);
+#endif
+  va_end (args);
+}
