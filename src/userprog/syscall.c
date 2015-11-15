@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include <syscall-nr.h>
+#include "filesys/filesys.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
@@ -14,6 +15,8 @@ static void syscall_handler (struct intr_frame *);
 static void validate_user_string (char* user_str);
 static void validate_user_buffer (void* user_buf, unsigned size);
 static void* uaddr_to_kaddr (const void* uaddr);
+
+// TODO check filename to be correct e.g. length
 
 void
 syscall_init (void) 
@@ -59,12 +62,12 @@ syscall_wait (pid_t pid) {
 
 static bool 
 syscall_create (const char *file, unsigned initial_size) {
-  return false;
+  return filesys_create(file, initial_size);
 }
 
 static bool 
 syscall_remove (const char *file) {
-  return false;
+  return filesys_remove(file);
 }
 
 static int 
