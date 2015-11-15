@@ -17,9 +17,158 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "threads/synch.h"
+#include "lib/kernel/list.h"
+#include "lib/user/syscall.h"
 
+#define PID_ERROR ((pid_t) -1)
+#define PID_MAX ((pid_t) 2048)
+#define PROCESS_NO_EXIT_STATUS -3
+
+static pid_t allocate_pid (void);
+static void clear_process_state(pid_t pid);
+static void clear_process_state_(pid_t pid, bool init_list);
 static thread_func start_process NO_RETURN;
 static bool load (char *cmdline, void (**eip) (void), void **esp);
+
+struct start_process_param
+{
+  pid_t pid;
+  pid_t parent_pid;
+  char *cmdline;
+};
+
+struct pid_item
+{
+  // boilerplate entry
+  struct list_elem elem;
+  
+  pid_t pid;
+};
+
+enum process_status
+{
+  PROCESS_UNUSED,     /* indicates a free entry */
+  PROCESS_RUNNING,    /* Normal state */
+  PROCESS_WAIT,       /* indicates process called wait() */
+  PROCESS_ZOMBIE      /* Process is dead but parent did not call wait() yet */
+};
+
+struct process_state_item
+{
+  // tid of this process
+  tid_t tid;
+  // pid of parent process
+  pid_t parent_pid;
+  
+  // status
+  enum process_status status;
+  // exit status as set by exit()
+  int exit_status_value;
+  
+  // if process_state == PROCESS_WAIT the pid
+  // of the process we are waiting on
+  pid_t wait_for_child;
+  
+  // un-wait()-ed child processes
+  // list must be ordered
+  struct list to_wait_on_list;
+};
+
+// contains for all pid an entry
+static struct process_state_item process_states[PID_MAX];
+// Set to the lowest pid we have to check for a
+// free pid value. If we reclaim a pid and it 
+// is lower than pid_search_start we of course
+// have to set pid_search_start to the reclaimed
+// value.
+static pid_t pid_search_start = 1;
+
+// general lock for all pid related things
+static struct lock pid_lock;
+// condition to wait on any exit of any other process
+// caller must hold the `pid_lock` to use this condition
+static struct condition process_exit_cond;
+
+/* Returns a pid to use for a new thread or 0 on error
+   e.g. no more usable pids. */
+static pid_t
+allocate_pid (void) 
+{
+  pid_t pid = PID_ERROR;
+
+  lock_acquire (&pid_lock);
+  pid_t pid_ = pid_search_start;
+  while (pid_ <= PID_MAX)
+  {
+    if (process_states[pid].tid)
+    {
+      // process unused
+      pid = pid_;
+      // next possible free pid is pid+1
+      pid_search_start = pid+1;
+      break;
+    }
+  }
+  lock_release (&pid_lock);
+
+  return pid;
+}
+
+// MUST only be called if pid_lock is held
+static void
+clear_process_state(pid_t pid)
+{
+  if (0 <= pid && pid <= PID_MAX)
+  {
+    clear_process_state_(pid, false);
+  }
+}
+
+// MUST only be called if pid_lock is held
+static void
+clear_process_state_(pid_t pid, bool init_list)
+{
+  ASSERT(lock_held_by_current_thread(&pid_lock));
+  
+  // list manipulation is ok, because lock is held
+  process_states[pid].tid = 0;
+  process_states[pid].parent_pid = 0;
+  process_states[pid].status = PROCESS_UNUSED;
+  process_states[pid].exit_status_value = PROCESS_NO_EXIT_STATUS;
+  process_states[pid].wait_for_child = 0;
+  if (init_list)
+  {
+    // initialize a new list
+    list_init (&process_states[pid].to_wait_on_list);
+  }
+  else
+  {
+    // remove all entries from list
+    while (!list_empty(&process_states[pid].to_wait_on_list))
+    {
+      list_remove(list_front(&process_states[pid].to_wait_on_list));
+    }
+  };
+}
+
+void
+process_init(void)
+{
+  // init locks
+  lock_init(&pid_lock);
+  
+  // init conditions
+  cond_init(&process_exit_cond);
+  
+  lock_acquire (&pid_lock);
+  // init process state list
+  for (pid_t i = 0; i < PID_MAX; i++)
+  {
+    clear_process_state_(i, true);
+  }
+  lock_release (&pid_lock);
+}
 
 /* Starts a new thread running a user program loaded from
    CMDLINE.  The new thread may be scheduled (and may even exit)
@@ -27,11 +176,21 @@ static bool load (char *cmdline, void (**eip) (void), void **esp);
    thread id, or TID_ERROR if the thread cannot be created.
    
    cmdline MUST be smaller than one page */
-tid_t
+pid_t
 process_execute (const char *cmdline)
 {
+  printf("@@@ process_execute called @@@\n");
   char *fn_copy;
   tid_t tid;
+  pid_t pid, parent_pid = thread_current()->pid;
+  struct start_process_param *param;
+  
+  // reserve a pid
+  pid = allocate_pid();
+  if (pid == PID_ERROR)
+  {
+    goto execute_fail;
+  }
   
   // start_process requires the provided string to start
   // on a non space character, so skip all spaces
@@ -44,24 +203,58 @@ process_execute (const char *cmdline)
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
   if (fn_copy == NULL)
-    return TID_ERROR;
+    goto execute_fail;
   strlcpy (fn_copy, cmdline, PGSIZE);
 
   /* Create a new thread to execute CMDLINE. */
-  tid = thread_create (cmdline, PRI_DEFAULT, start_process, fn_copy);
+  param = malloc(sizeof (struct start_process_param));
+  param->pid = pid;
+  param->parent_pid = parent_pid;
+  param->cmdline = fn_copy;tid = thread_create (cmdline, PRI_DEFAULT, start_process, param);
   if (tid == TID_ERROR)
-    palloc_free_page (fn_copy); 
-  return tid;
+  {
+    palloc_free_page (fn_copy);
+    goto execute_fail;
+  }
+  
+  // setup of child successfull, allow to wait on child
+  lock_acquire(&pid_lock);
+  // aquire memory for list entry
+  struct pid_item *e = malloc(sizeof(struct pid_item));
+  e->pid = pid;
+  list_push_front(&(process_states[parent_pid].to_wait_on_list), e);
+  lock_release(&pid_lock);
+  
+  return pid;
+  
+  execute_fail:
+  // reset process state
+  lock_acquire(&pid_lock);
+  clear_process_state(pid);
+  lock_release(&pid_lock);
+  return PID_ERROR;
 }
 
 /* A thread function that loads a user process and starts it
    running. */
 static void
-start_process (void *cmdline_)
+start_process (void *args)
 {
-  char *cmdline = cmdline_;
+  struct start_process_param *param = (struct start_process_param *) args;
+  pid_t pid  = param->pid;
+  pid_t parent_pid  = param->parent_pid;
+  char *cmdline = param->cmdline;
+  free(args);
   struct intr_frame if_;
   bool success;
+  
+  // init process state
+  thread_current()->pid = pid;
+  lock_acquire(&pid_lock);
+  process_states[pid].tid = thread_current()->tid;
+  process_states[pid].parent_pid = parent_pid;
+  process_states[pid].status = PROCESS_RUNNING;
+  lock_release(&pid_lock);
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
@@ -73,9 +266,9 @@ start_process (void *cmdline_)
   /* If load failed, quit. */
   palloc_free_page (cmdline);
   if (!success)
-    thread_exit ();
-  //printf("MY DEBUG");
-  //while(1);
+  {
+    process_exit_with_value(-1);
+  }
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -87,28 +280,112 @@ start_process (void *cmdline_)
   NOT_REACHED ();
 }
 
-/* Waits for thread TID to die and returns its exit status.  If
+/* Waits for thread PID to die and returns its exit status.  If
    it was terminated by the kernel (i.e. killed due to an
-   exception), returns -1.  If TID is invalid or if it was not a
+   exception), returns -1.  If PID is invalid or if it was not a
    child of the calling process, or if process_wait() has already
-   been successfully called for the given TID, returns -1
+   been successfully called for the given PID, returns -1
    immediately, without waiting.
 
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (pid_t child_pid) 
 {
-  while(1);
-  return -1;
+  printf("@@@ process_wait called @@@\n");
+  // pid of calling process
+  pid_t pid = thread_current()->pid;
+  printf("+++ pid %d +++\n", pid);
+  bool may_wait = false;
+  int res = -1;
+  
+  lock_acquire(&pid_lock);
+  // TODO
+  // process state of pid must contain child_pid
+  // if not return -1
+  // if child not zombie
+  //    wait on condition
+  // if child is zombie return exit value
+  struct list_elem *e;
+
+  // check if we are allowed to wait for this pid
+  for (e = list_begin (&(process_states[pid].to_wait_on_list));
+       e != list_end (&(process_states[pid].to_wait_on_list));
+       e = list_next (e))
+  {
+    struct pid_item *pid_i = list_entry (e, struct pid_item, elem);
+    
+    printf("+++ (%d) may wait on pid: %d +++\n", pid, pid_i->pid);
+    
+    if (pid_i->pid == child_pid)
+    {
+      may_wait = true;
+      break;
+    }
+  }
+  
+  printf("@@@ may_wait %d @@@\n", may_wait);
+  // valid child
+  if (may_wait)
+  {
+    // wait till child process becomes a zombie
+    while (process_states[child_pid].status != PROCESS_ZOMBIE)
+    {
+      printf("--- (%d) waits on cond for child %d ---\n", pid, child_pid);
+      // wait till the next process exits
+      // could be our child, so recheck condition
+      cond_wait(&process_exit_cond, &pid_lock);
+      printf("--- (%d) continues on cond for child %d ---\n", pid, child_pid);
+    }
+    printf("--- (%d) child %d now zombie ---\n", pid, child_pid);
+    // remove posibility to wait for child a second time
+    list_remove(e);
+    free(e);
+    // read exit value and reset state data
+    res = process_states[child_pid].exit_status_value;
+    clear_process_state(child_pid);
+  }
+  
+  lock_release(&pid_lock);
+  printf("exit process_wait with return value %d\n", res);
+  return res;
+}
+
+// TODO check if we this should be thread_exit rather
+void NO_RETURN
+process_exit_with_value (int exit_value)
+{
+  pid_t pid = thread_current()->pid;
+  printf("@@@ process_exit_with_value called (%d), %d @@@\n", pid, exit_value);
+  
+  lock_acquire(&pid_lock);
+  process_states[pid].status = PROCESS_ZOMBIE;
+  process_states[pid].exit_status_value = exit_value;
+  lock_release(&pid_lock);
+  
+  thread_exit();
 }
 
 /* Free the current process's resources. */
 void
 process_exit (void)
 {
+  printf("@@@ process_exit called @@@\n");
   struct thread *cur = thread_current ();
   uint32_t *pd;
+  
+  // TODO
+  // remove all child zombies
+  // clear the rest of the list
+  //
+  // set exit code
+  // set to zombie
+  //
+  // signal_all condition
+  lock_acquire(&pid_lock);
+  printf("--- Signal condition due to process %d ---\n", cur->pid);
+  cond_broadcast(&process_exit_cond, &pid_lock);
+  lock_release(&pid_lock);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */

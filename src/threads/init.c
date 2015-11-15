@@ -89,6 +89,9 @@ main (void)
      then enable console locking. */
   thread_init ();
   console_init ();  
+#ifdef USERPROG
+  process_init ();
+#endif
 
   /* Greet user. */
   printf ("Pintos booting with %'"PRIu32" kB RAM...\n",
