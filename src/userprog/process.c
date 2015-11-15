@@ -364,6 +364,9 @@ process_exit_with_value (int exit_value)
   struct thread *cur = thread_current ();
   pid_t pid = cur->pid;
   
+  // required exit message
+  printf ("%s: exit(%d)\n", cur->name, exit_value);
+  
   log_debug("@@@ (%d) process_exit_with_value called %d @@@\n", pid, exit_value);
   
   lock_acquire(&pid_lock);
