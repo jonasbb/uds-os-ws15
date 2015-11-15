@@ -192,12 +192,15 @@ process_execute (const char *cmdline)
     goto execute_fail;
   }
   
+  // TODO do argument parsing here
   // start_process requires the provided string to start
   // on a non space character, so skip all spaces
   while (*cmdline == ' ')
   {
     cmdline++;
   }
+  strlcpy(thread_name, cmdline, 16);
+  strtok_r(thread_name, " ", &save_ptr);
 
   /* Make a copy of CMDLINE.
      Otherwise there's a race between the caller and load(). */
@@ -210,7 +213,7 @@ process_execute (const char *cmdline)
   param = malloc(sizeof (struct start_process_param));
   param->pid = pid;
   param->parent_pid = parent_pid;
-  param->cmdline = fn_copy;tid = thread_create (cmdline, PRI_DEFAULT, start_process, param);
+  param->cmdline = fn_copy;tid = thread_create (thread_name, PRI_DEFAULT, start_process, param);
   if (tid == TID_ERROR)
   {
     palloc_free_page (fn_copy);
