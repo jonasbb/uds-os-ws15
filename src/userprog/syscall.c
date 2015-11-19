@@ -270,6 +270,12 @@ syscall_handler (struct intr_frame *f)
 
 static void* 
 uaddr_to_kaddr (const void* uaddr) {
+  // check for null pointers
+  if (!uaddr) {
+      syscall_exit(-1); /* address violation */
+      NOT_REACHED ();
+  }
+  
   if (is_user_vaddr(uaddr)){
     void* page = pagedir_get_page(thread_current()->pagedir, uaddr);
     if (page) {
