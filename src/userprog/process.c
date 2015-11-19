@@ -170,6 +170,7 @@ clear_process_state_(pid_t pid, bool init_list)
 void
 process_init(void)
 {
+  log_debug("@@@ process_init called @@@\n");
   // init locks
   lock_init(&pid_lock);
   
@@ -194,7 +195,7 @@ process_init(void)
 pid_t
 process_execute (const char *cmdline)
 {
-  log_debug("@@@ process_execute called @@@\n");
+  log_debug("@@@ process_execute called: %s @@@\n", cmdline);
   char *fn_copy, *save_ptr, thread_name[16];
   tid_t tid;
   pid_t pid, parent_pid = thread_current()->pid;
@@ -269,6 +270,8 @@ start_process (void *args)
   pid_t pid  = param->pid;
   pid_t parent_pid  = param->parent_pid;
   char *cmdline = param->cmdline;
+  log_debug("@@@ start_process called: pid (%d) parent_pid (%d) cmdline %s @@@\n",
+          pid, parent_pid, cmdline);
   struct intr_frame if_;
   bool success;
   
@@ -322,7 +325,7 @@ start_process (void *args)
 int
 process_wait (pid_t child_pid) 
 {
-  log_debug("@@@ process_wait called @@@\n");
+  log_debug("@@@ process_wait called (%d) @@@\n", child_pid);
   // pid of calling process
   pid_t pid = thread_current()->pid;
   log_debug("+++ pid %d +++\n", pid);
@@ -566,6 +569,7 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
 bool
 load (char *cmdline, void (**eip) (void), void **esp) 
 {
+  log_debug("@@@ load called: %s @@@\n", cmdline);
   struct thread *t = thread_current ();
   struct Elf32_Ehdr ehdr;
   struct file *file = NULL;
