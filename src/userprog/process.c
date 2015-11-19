@@ -37,6 +37,8 @@ struct start_process_param
   pid_t pid;
   pid_t parent_pid;
   char *cmdline;
+  struct semaphore sema;
+  bool success;
 };
 
 struct pid_item
@@ -196,7 +198,7 @@ process_execute (const char *cmdline)
   char *fn_copy, *save_ptr, thread_name[16];
   tid_t tid;
   pid_t pid, parent_pid = thread_current()->pid;
-  struct start_process_param *param;
+  struct start_process_param param;
   
   // reserve a pid
   pid = allocate_pid();
@@ -223,13 +225,19 @@ process_execute (const char *cmdline)
   strlcpy (fn_copy, cmdline, PGSIZE);
 
   /* Create a new thread to execute CMDLINE. */
-  param = malloc(sizeof (struct start_process_param));
-  param->pid = pid;
-  param->parent_pid = parent_pid;
-  param->cmdline = fn_copy;tid = thread_create (thread_name, PRI_DEFAULT, start_process, param);
+  param.pid = pid;
+  param.parent_pid = parent_pid;
+  param.cmdline = fn_copy;
+  sema_init(&param.sema, 0);
+  tid = thread_create (thread_name, PRI_DEFAULT, start_process, &param);
   if (tid == TID_ERROR)
   {
-    palloc_free_page (fn_copy);
+    goto execute_fail_free;
+  }
+  // wait till child has signaled its status
+  sema_down(&param.sema);
+  if (param.success == false)
+  {
     goto execute_fail;
   }
   
@@ -240,9 +248,10 @@ process_execute (const char *cmdline)
   e->pid = pid;
   list_insert_ordered(&(process_states[parent_pid].to_wait_on_list), (struct list_elem *) e, &pid_item_less, NULL);
   lock_release(&pid_lock);
-  
   return pid;
   
+  execute_fail_free:
+  palloc_free_page (fn_copy);
   execute_fail:
   // reset process state
   lock_acquire(&pid_lock);
@@ -260,7 +269,6 @@ start_process (void *args)
   pid_t pid  = param->pid;
   pid_t parent_pid  = param->parent_pid;
   char *cmdline = param->cmdline;
-  free(args);
   struct intr_frame if_;
   bool success;
   
@@ -283,8 +291,14 @@ start_process (void *args)
   palloc_free_page (cmdline);
   if (!success)
   {
+    // indicate failure to parent
+    param->success = false;
+    sema_up(&param->sema);
     process_exit_with_value(-1);
   }
+  // indicate success to parent
+  param->success = true;
+  sema_up(&param->sema);
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
