@@ -262,7 +262,9 @@ syscall_handler (struct intr_frame *f)
                    fd = *((int*) uaddr_to_kaddr(f->esp+4));
                    syscall_close(fd); 
                    break;                  /* Close a file. */
-    default: thread_exit (); break; /* Should not happen */ 
+    default:
+                   syscall_exit(-1);
+                   break; /* Should not happen */ 
   }
 }
 
