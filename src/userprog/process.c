@@ -47,6 +47,14 @@ struct pid_item
   pid_t pid;
 };
 
+static bool
+pid_item_less (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
+{
+  struct pid_item *pid_a = list_entry(a, struct pid_item, elem);
+  struct pid_item *pid_b = list_entry(b, struct pid_item, elem);
+  return pid_a->pid < pid_b->pid;
+}
+
 enum process_status
 {
   PROCESS_UNUSED,     /* indicates a free entry */
@@ -226,8 +234,7 @@ process_execute (const char *cmdline)
   // aquire memory for list entry
   struct pid_item *e = malloc(sizeof(struct pid_item));
   e->pid = pid;
-  // TODO must be pushed sorted
-  list_push_front(&(process_states[parent_pid].to_wait_on_list), e);
+  list_insert_ordered(&(process_states[parent_pid].to_wait_on_list), (struct list_elem *) e, &pid_item_less, NULL);
   lock_release(&pid_lock);
   
   return pid;
