@@ -72,6 +72,9 @@ struct process_state_item
   // pid of parent process
   pid_t parent_pid;
   
+  // executeable file, to prevent writes on this file
+  struct file *file;
+  
   // status
   enum process_status status;
   // exit status as set by exit()
@@ -150,11 +153,20 @@ clear_process_state_(pid_t pid, bool init_list)
   process_states[pid].wait_for_child = 0;
   if (init_list)
   {
+    process_states[pid].file = NULL;
+    
     // initialize a new list
     list_init (&process_states[pid].to_wait_on_list);
   }
   else
   {
+    // close potential open file
+    if (process_states[pid].file != NULL)
+    {
+      file_close(process_states[pid].file);
+      process_states[pid].file = NULL;
+    }
+    
     struct list_elem *e;
     // remove all entries from list
     while (!list_empty(&process_states[pid].to_wait_on_list))
@@ -437,6 +449,13 @@ process_exit_with_value (int exit_value)
   {
     process_states[pid].status = PROCESS_ZOMBIE;
     process_states[pid].exit_status_value = exit_value;
+    
+    // close open executeable file
+    if (process_states[pid].file != NULL)
+    {
+      file_close(process_states[pid].file);
+      process_states[pid].file = NULL;
+    }
   
     // only if we have a parent any process could wait on us
     log_debug("--- Signal condition due to process %d ---\n", cur->pid);
@@ -587,11 +606,20 @@ load (char *cmdline, void (**eip) (void), void **esp)
   /* Open executable file. */
   strtok_r(cmdline, " ", &save_ptr); /* terminate the filename with \n */
   file = filesys_open (cmdline);
+  
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", cmdline);
       goto done; 
     }
+  // prevent concurrent changes on this file
+  // as long as it is executed
+  file_deny_write(file);
+  // copy file pointer to prevent writes
+  // only works as long as the file is opened
+  lock_acquire (&pid_lock);
+  process_states[t->pid].file = file;
+  lock_release (&pid_lock);
 
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
@@ -676,7 +704,6 @@ load (char *cmdline, void (**eip) (void), void **esp)
 
  done:
   /* We arrive here whether the load is successful or not. */
-  file_close (file);
   return success;
 }
 
