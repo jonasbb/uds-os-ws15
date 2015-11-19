@@ -153,11 +153,15 @@ clear_process_state_(pid_t pid, bool init_list)
   }
   else
   {
+    struct list_elem *e;
     // remove all entries from list
     while (!list_empty(&process_states[pid].to_wait_on_list))
     {
-      list_remove(list_front(&process_states[pid].to_wait_on_list));
+      e = list_front(&process_states[pid].to_wait_on_list);
+      list_remove(e);
+      free(e);
     }
+    e = NULL;
   };
 }
 
@@ -352,6 +356,7 @@ process_wait (pid_t child_pid)
     // remove posibility to wait for child a second time
     list_remove(e);
     free(e);
+    e = NULL;
     // read exit value and reset state data
     res = process_states[child_pid].exit_status_value;
     clear_process_state(child_pid);
@@ -384,10 +389,10 @@ process_exit_with_value (int exit_value)
   
   // remove all child zombies
   // remove parent from rest of childs
-  struct list_elem *e;
+  struct list_elem *e, *e2;
   for (e = list_begin (&(process_states[cur->pid].to_wait_on_list));
        e != list_end (&(process_states[cur->pid].to_wait_on_list));
-       e = list_next (e))
+       )
   {
     struct pid_item *pid_i = list_entry (e, struct pid_item, elem);
     
@@ -401,6 +406,12 @@ process_exit_with_value (int exit_value)
       // remove us as parent, so that those processes will not wait on us
       process_states[pid_i->pid].parent_pid = PID_ERROR;
     }
+    
+    // clear list
+    e2 = list_next (e);
+    list_remove(e);
+    free(e);
+    e = e2;
   }
   
   // if we have a parent the process must persist until a possible later call to wait
