@@ -1,6 +1,8 @@
 #include "userprog/syscall.h"
 #include <stdio.h>
+#include <debug.h>
 #include <stdbool.h>
+#include <string.h>
 #include <syscall-nr.h>
 #include "devices/shutdown.h"
 #include "threads/interrupt.h"
@@ -20,18 +22,19 @@ syscall_init (void)
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
-void NO_RETURN
-halt(void) {
+static void NO_RETURN
+syscall_halt(void) {
   shutdown_power_off();
 }
 
-void 
-exit (int status) {
-
+static void NO_RETURN
+syscall_exit (int status) {
+  process_exit_with_value(status);
+  NOT_REACHED();
 }
 
-pid_t
-exec(const char *cmd_line) {
+static pid_t
+syscall_exec(const char *cmd_line) {
 #define EXEC_ERROR ((pid_t) -1)
   // we are allowed to impose a reasonable limit on argument data
   // the documentations mentions one page
@@ -40,48 +43,48 @@ exec(const char *cmd_line) {
     return EXEC_ERROR;
   }
   
-  tid_t tid = process_execute(cmd_line);
-  if (tid == TID_ERROR)
+  pid_t pid = process_execute(cmd_line);
+  if (pid == PID_ERROR)
   {
     return EXEC_ERROR;
   }
   
   // child started with pid
-  return (pid_t) tid;
+  return pid;
 }
 
-int 
-wait (pid_t pid) {
-  return -1;
+static int 
+syscall_wait (pid_t pid) {
+  return process_wait(pid);
 }
 
-bool 
-create (const char *file, unsigned initial_size) {
+static bool 
+syscall_create (const char *file, unsigned initial_size) {
   return false;
 }
 
-bool 
-remove (const char *file) {
+static bool 
+syscall_remove (const char *file) {
   return false;
 }
 
-int 
-open (const char *file) {
+static int 
+syscall_open (const char *file) {
   return -1;
 }
 
-int 
-filesize (int fd) {
+static int 
+syscall_filesize (int fd) {
   return -1;
 }
 
-int 
-read (int fd, void *buffer, unsigned size) {
+static int 
+syscall_read (int fd, void *buffer, unsigned size) {
   return -1;
 }
 
-int 
-write (int fd, const void *buffer, unsigned size) {
+static int 
+syscall_write (int fd, const void *buffer, unsigned size) {
   if (fd == 1)
   {
     // TODO long buffer could be split (multiple megabytes)
@@ -91,18 +94,18 @@ write (int fd, const void *buffer, unsigned size) {
     return -1;
 }
 
-void 
-seek (int fd, unsigned position) {
+static void 
+syscall_seek (int fd, unsigned position) {
 
 }
 
-unsigned 
-tell (int fd) {
+static unsigned 
+syscall_tell (int fd) {
   return 1;
 }
 
-void 
-close (int fd) {
+static void 
+syscall_close (int fd) {
   return;
 }
 
@@ -186,52 +189,57 @@ syscall_handler (struct intr_frame *f)
   char *file_name, *file_name_uaddr, *exec_name, *exec_name_uaddr ;
   unsigned size, position;
   int status, pid, fd;
-  printf ("system call!\n");
 
   uint32_t syscall_nr = *((uint32_t*) uaddr_to_kaddr(f->esp));
   
   switch (syscall_nr) {
-    case SYS_HALT: halt(); break;                  /* Halt the operating system. */
-    case SYS_EXIT: ;status = *((int*) uaddr_to_kaddr(f->esp+4));
-                   exit(status); break;                  /* Terminate this process. */
-    case SYS_EXEC: ;exec_name_uaddr = *((char**) uaddr_to_kaddr(f->esp+4)); /* char pointer in usermode */ 
+    case SYS_HALT:
+                   syscall_halt();
+                   break;                  /* Halt the operating system. */
+    case SYS_EXIT:
+                   status = *((int*) uaddr_to_kaddr(f->esp+4));
+                   syscall_exit(status);
+                   break;                  /* Terminate this process. */
+    case SYS_EXEC:
+                   exec_name_uaddr = *((char**) uaddr_to_kaddr(f->esp+4)); /* char pointer in usermode */ 
                    validate_user_string(exec_name_uaddr);
                    exec_name = (char*) uaddr_to_kaddr(exec_name_uaddr); /* char pointer in kernel mode */
-                   f->eax = exec(exec_name);
+                   f->eax = syscall_exec(exec_name);
                    break; /* Start another process. */
-    case SYS_WAIT: ;pid = *((int*) uaddr_to_kaddr(f->esp+4));
-                   f->eax = wait(pid);  /* Wait for a child process to die. */
+    case SYS_WAIT:
+                   pid = *((int*) uaddr_to_kaddr(f->esp+4));
+                   f->eax = syscall_wait(pid);  /* Wait for a child process to die. */
                    break;
     case SYS_CREATE: 
-                   ;file_name_uaddr = *((char**) uaddr_to_kaddr(f->esp+4)); /* char pointer in usermode */ 
+                   file_name_uaddr = *((char**) uaddr_to_kaddr(f->esp+4)); /* char pointer in usermode */ 
                    validate_user_string(file_name_uaddr);
                    file_name = (char*) uaddr_to_kaddr(file_name_uaddr); /* char pointer in kernel mode */
                    size = *((unsigned*) uaddr_to_kaddr(f->esp+8));
-                   f->eax = create(file_name, size);
+                   f->eax = syscall_create(file_name, size);
                    break;                /* Create a file. */
     case SYS_REMOVE:
                    file_name_uaddr = *((char**) uaddr_to_kaddr(f->esp+4)); /* char pointer in usermode */ 
                    validate_user_string(file_name_uaddr);
                    file_name = (char*) uaddr_to_kaddr(file_name_uaddr); /* char pointer in kernel mode */
-                   f->eax = remove(file_name);
+                   f->eax = syscall_remove(file_name);
                    break;                 /* Delete a file. */
-    case SYS_OPEN: 
+    case SYS_OPEN:
                    file_name_uaddr = *((char**) uaddr_to_kaddr(f->esp+4)); /* char pointer in usermode */ 
                    validate_user_string(file_name_uaddr);
                    file_name = (char*) uaddr_to_kaddr(file_name_uaddr); /* char pointer in kernel mode */
-                   f->eax = open(file_name);
+                   f->eax = syscall_open(file_name);
                    break;                  /* Open a file. */
     case SYS_FILESIZE: 
-                   ;fd = *((int*) uaddr_to_kaddr(f->esp+4));
-                   f->eax = filesize(fd);
+                   fd = *((int*) uaddr_to_kaddr(f->esp+4));
+                   f->eax = syscall_filesize(fd);
                    break;              /* Obtain a file's size. */
-    case SYS_READ: 
+    case SYS_READ:
                    fd = *((int*) uaddr_to_kaddr(f->esp+4));
                    buffer_user = *((void**)uaddr_to_kaddr(f->esp+8)); /* void* in user mode */
                    size = *((unsigned *)uaddr_to_kaddr(f->esp+12));
                    validate_user_buffer(buffer_user, size); /* validates user input */
                    buffer_kernel = uaddr_to_kaddr(buffer_user); /* void* in kernel mode */
-                   f->eax = read(fd, buffer_kernel, size);
+                   f->eax = syscall_read(fd, buffer_kernel, size);
                    break;    /* Read from a file. */
     case SYS_WRITE:
                    fd = *((int*) uaddr_to_kaddr(f->esp+4));
@@ -239,20 +247,20 @@ syscall_handler (struct intr_frame *f)
                    size = *((unsigned *)uaddr_to_kaddr(f->esp+12));
                    validate_user_buffer(buffer_user, size); /* validates user input */
                    buffer_kernel = uaddr_to_kaddr(buffer_user); /* void* in kernel mode */
-                   f->eax = write(fd, buffer_kernel, size);
+                   f->eax = syscall_write(fd, buffer_kernel, size);
                    break;                  /* Write to a file. */
-    case SYS_SEEK: 
+    case SYS_SEEK:
                    fd = *((int*) uaddr_to_kaddr(f->esp+4));
                    position = *((unsigned*) uaddr_to_kaddr(f->esp+8));
-                   seek(fd,position); 
+                   syscall_seek(fd,position); 
                    break;  /* Change position in a file. */
     case SYS_TELL: 
                    fd = *((int*) uaddr_to_kaddr(f->esp+4));
-                   f->eax = tell(fd);
+                   f->eax = syscall_tell(fd);
                    break;                  /* Report current position in a file. */
     case SYS_CLOSE:
                    fd = *((int*) uaddr_to_kaddr(f->esp+4));
-                   close(fd); 
+                   syscall_close(fd); 
                    break;                  /* Close a file. */
     default: thread_exit (); break; /* Should not happen */ 
   }
@@ -266,11 +274,13 @@ uaddr_to_kaddr (const void* uaddr) {
       return page;
     } 
     else {
-      exit(-1); /* address violation */
+      syscall_exit(-1); /* address violation */
+      NOT_REACHED ();
     }
   }
   else {
-    exit(-1); /* address violation */
+    syscall_exit(-1); /* address violation */
+    NOT_REACHED ();
   }
 }
 
