@@ -55,6 +55,14 @@ enum process_status
   PROCESS_ZOMBIE      /* Process is dead but parent did not call wait() yet */
 };
 
+// listitem for open file desricptor list
+struct fdlist
+{
+  struct list_elem elem;
+  int fd;
+  struct file *file;
+};
+
 struct process_state_item
 {
   // tid of this process
@@ -74,6 +82,10 @@ struct process_state_item
   // un-wait()-ed child processes
   // list must be ordered
   struct list to_wait_on_list;
+  
+  // open file descriptor list
+  int nextfd;
+  struct list fdlist;
 };
 
 // contains for all pid an entry
@@ -142,6 +154,7 @@ clear_process_state_(pid_t pid, bool init_list)
   {
     // initialize a new list
     list_init (&process_states[pid].to_wait_on_list);
+    list_init (&process_states[pid].fdlist);
   }
   else
   {
@@ -149,6 +162,10 @@ clear_process_state_(pid_t pid, bool init_list)
     while (!list_empty(&process_states[pid].to_wait_on_list))
     {
       list_remove(list_front(&process_states[pid].to_wait_on_list));
+    }
+    while (!list_empty(&process_states[pid].fdlist))
+    {
+      list_remove(list_front(&process_states[pid].fdlist));
     }
   };
 }
