@@ -110,7 +110,7 @@ allocate_pid (void)
   pid_t pid_ = pid_search_start;
   while (pid_ <= PID_MAX)
   {
-    if (process_states[pid].tid)
+    if (process_states[pid].status == PROCESS_UNUSED)
     {
       // process unused
       pid = pid_;
