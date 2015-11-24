@@ -101,7 +101,13 @@ syscall_open (const char *file) {
 
 static int 
 syscall_filesize (int fd) {
-  return -1;
+  struct file *f = get_fdlist(thread_current()->pid, fd);
+  if (!f) // file does not exist
+    return -1;
+  lock_acquire(&fs_lock);
+  int res = file_length(f);
+  lock_release(&fs_lock);
+  return res;
 }
 
 static int 
