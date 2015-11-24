@@ -23,7 +23,7 @@
 #include "lib/user/syscall.h"
 
 #define PID_ERROR ((pid_t) -1)
-#define PID_MAX ((pid_t) 2048)
+#define PID_MAX ((pid_t) 256)
 #define PROCESS_NO_EXIT_STATUS -3
 
 static pid_t allocate_pid (void);
@@ -215,6 +215,8 @@ clear_process_state_(pid_t pid, bool init_list)
     // remove all entries from list
     while (!list_empty(&process_states[pid].to_wait_on_list))
     {
+      // TODO make rm_parent function
+      // use here and in normal cleanup code
       e = list_front(&process_states[pid].to_wait_on_list);
       list_remove(e);
       free(e);
@@ -222,6 +224,7 @@ clear_process_state_(pid_t pid, bool init_list)
 
     while (!list_empty(&process_states[pid].fdlist))
     {
+      // TODO make close_fd function
       e = list_front(&process_states[pid].fdlist);
       struct fdlist_item *f = list_entry (e, struct fdlist_item, elem);
       file_close(f->file);
