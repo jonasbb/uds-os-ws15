@@ -223,6 +223,8 @@ clear_process_state_(pid_t pid, bool init_list)
     while (!list_empty(&process_states[pid].fdlist))
     {
       e = list_front(&process_states[pid].fdlist);
+      struct fdlist_item *f = list_entry (e, struct fdlist_item, elem);
+      file_close(f->file);
       list_remove(e);
       free(e);
     }
