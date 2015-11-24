@@ -111,7 +111,24 @@ syscall_filesize (int fd) {
 
 static int 
 syscall_read (int fd, void *buffer, unsigned size) {
-  return -1;
+  if (fd == 0)
+  {
+    int i;
+    char *out = buffer;
+    for(i = 0;i < size; i++, out++)
+    {
+      *out = input_getc();
+    }
+    return i;
+  } else {
+    struct file *f = get_fdlist(thread_current()->pid, fd);
+    if (!f) // file does not exist
+      return -1;
+    lock_acquire(&fs_lock);
+    int res = file_read(f, buffer, size);
+    lock_release(&fs_lock);
+    return res;
+  }
 }
 
 static int 
