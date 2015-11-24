@@ -210,10 +210,12 @@ clear_process_state_(pid_t pid, bool init_list)
 int
 insert_fdlist(int pid, struct file* f)
 {
+  lock_acquire(&pid_lock);
   struct fdlist_item *e = malloc(sizeof(struct fdlist_item));
   e->file = f;
   e->fd = process_states[pid].nextfd++;
   list_push_back(&process_states[pid].fdlist, (struct list_elem *) e);
+  lock_release(&pid_lock);
   return e->fd;
 }
 
@@ -223,7 +225,9 @@ insert_fdlist(int pid, struct file* f)
 bool
 delete_fdlist(int pid, int fd)
 {
+  lock_acquire(&pid_lock);
   struct list_elem *e;
+  bool result = false;
 
   for (e = list_begin (&process_states[pid].fdlist); e != list_end (&process_states[pid].fdlist);
     e = list_next (e))
@@ -232,10 +236,12 @@ delete_fdlist(int pid, int fd)
       if (f->fd == fd)
       {
         list_remove(&(f->elem));
-        return true;
+        result = true;
       }
     }
-    return false;
+  result = false;
+  lock_release(&pid_lock);
+  return result;
 }
 
 /* Returns the file struct pointer given the pid and the filedescriptor.
@@ -243,7 +249,9 @@ delete_fdlist(int pid, int fd)
 struct file*
 get_fdlist(int pid, int fd)
 {
+  lock_acquire(&pid_lock);
   struct list_elem *e;
+  struct file *result = NULL;
 
   for (e = list_begin (&process_states[pid].fdlist); e != list_end (&process_states[pid].fdlist);
     e = list_next (e))
@@ -251,10 +259,12 @@ get_fdlist(int pid, int fd)
       struct fdlist_item *f = list_entry (e, struct fdlist_item, elem);
       if (f->fd == fd)
       {
-        return f->file;
+        result =  f->file;
+        break;
       }
     }
-    return NULL;
+  lock_release(&pid_lock);
+  return result;
 }
 
 void
