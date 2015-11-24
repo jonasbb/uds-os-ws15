@@ -128,7 +128,13 @@ syscall_write (int fd, const void *buffer, unsigned size) {
 
 static void 
 syscall_seek (int fd, unsigned position) {
-
+  struct file *f = get_fdlist(thread_current()->pid, fd);
+  if (!f) // file does not exist
+    return 0;
+  return file_seek(get_fdlist(thread_current()->pid, fd), position);
+  lock_acquire(&fs_lock);
+  file_seek(f, position);
+  lock_release(&fs_lock);
 }
 
 static unsigned 
