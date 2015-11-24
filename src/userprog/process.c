@@ -208,7 +208,7 @@ clear_process_state_(pid_t pid, bool init_list)
 /* Function to insert files into the fdlist.
    Returns the fd used for this file */
 int
-insert_fdlist(int pid, struct file* f)
+insert_fdlist(pid_t pid, struct file* f)
 {
   lock_acquire(&pid_lock);
   struct fdlist_item *e = malloc(sizeof(struct fdlist_item));
@@ -223,7 +223,7 @@ insert_fdlist(int pid, struct file* f)
 /* Function to delete files from the fdlist.
    Returns true if file was found otherwise returns false */
 bool
-delete_fdlist(int pid, int fd)
+delete_fdlist(pid_t pid, int fd)
 {
   lock_acquire(&pid_lock);
   struct list_elem *e;
@@ -247,7 +247,7 @@ delete_fdlist(int pid, int fd)
 /* Returns the file struct pointer given the pid and the filedescriptor.
    If filedescriptor is unused returns NULL. */
 struct file*
-get_fdlist(int pid, int fd)
+get_fdlist(pid_t pid, int fd)
 {
   lock_acquire(&pid_lock);
   struct list_elem *e;
