@@ -5,6 +5,7 @@
 #include <string.h>
 #include <syscall-nr.h>
 #include "filesys/filesys.h"
+#include "devices/shutdown.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
@@ -24,9 +25,9 @@ syscall_init (void)
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
-static void
+static void NO_RETURN
 syscall_halt(void) {
-
+  shutdown_power_off();
 }
 
 static void NO_RETURN
@@ -269,12 +270,20 @@ syscall_handler (struct intr_frame *f)
                    fd = *((int*) uaddr_to_kaddr(f->esp+4));
                    syscall_close(fd); 
                    break;                  /* Close a file. */
-    default: thread_exit (); break; /* Should not happen */ 
+    default:
+                   syscall_exit(-1);
+                   break; /* Should not happen */ 
   }
 }
 
 static void* 
 uaddr_to_kaddr (const void* uaddr) {
+  // check for null pointers
+  if (!uaddr) {
+      syscall_exit(-1); /* address violation */
+      NOT_REACHED ();
+  }
+  
   if (is_user_vaddr(uaddr)){
     void* page = pagedir_get_page(thread_current()->pagedir, uaddr);
     if (page) {

@@ -37,6 +37,8 @@ struct start_process_param
   pid_t pid;
   pid_t parent_pid;
   char *cmdline;
+  struct semaphore sema;
+  bool success;
 };
 
 struct pid_item
@@ -78,6 +80,9 @@ struct process_state_item
   tid_t tid;
   // pid of parent process
   pid_t parent_pid;
+  
+  // executeable file, to prevent writes on this file
+  struct file *file;
   
   // status
   enum process_status status;
@@ -123,7 +128,7 @@ allocate_pid (void)
   pid_t pid_ = pid_search_start;
   while (pid_ <= PID_MAX)
   {
-    if (process_states[pid].tid)
+    if (process_states[pid_].status == PROCESS_UNUSED)
     {
       // process unused
       pid = pid_;
@@ -131,6 +136,7 @@ allocate_pid (void)
       pid_search_start = pid+1;
       break;
     }
+    pid_++;
   }
   lock_release (&pid_lock);
 
@@ -162,12 +168,21 @@ clear_process_state_(pid_t pid, bool init_list)
   process_states[pid].nextfd = 2;
   if (init_list)
   {
+    process_states[pid].file = NULL;
+    
     // initialize a new list
     list_init (&process_states[pid].to_wait_on_list);
     list_init (&process_states[pid].fdlist);
   }
   else
   {
+    // close potential open file
+    if (process_states[pid].file != NULL)
+    {
+      file_close(process_states[pid].file);
+      process_states[pid].file = NULL;
+    }
+    
     struct list_elem *e;
     // remove all entries from list
     while (!list_empty(&process_states[pid].to_wait_on_list))
@@ -245,6 +260,7 @@ get_fdlist(int pid, int fd)
 void
 process_init(void)
 {
+  log_debug("@@@ process_init called @@@\n");
   // init locks
   lock_init(&pid_lock);
   
@@ -269,11 +285,11 @@ process_init(void)
 pid_t
 process_execute (const char *cmdline)
 {
-  log_debug("@@@ process_execute called @@@\n");
+  log_debug("@@@ process_execute called: %s @@@\n", cmdline);
   char *fn_copy, *save_ptr, thread_name[16];
   tid_t tid;
   pid_t pid, parent_pid = thread_current()->pid;
-  struct start_process_param *param;
+  struct start_process_param param;
   
   // reserve a pid
   pid = allocate_pid();
@@ -300,13 +316,19 @@ process_execute (const char *cmdline)
   strlcpy (fn_copy, cmdline, PGSIZE);
 
   /* Create a new thread to execute CMDLINE. */
-  param = malloc(sizeof (struct start_process_param));
-  param->pid = pid;
-  param->parent_pid = parent_pid;
-  param->cmdline = fn_copy;tid = thread_create (thread_name, PRI_DEFAULT, start_process, param);
+  param.pid = pid;
+  param.parent_pid = parent_pid;
+  param.cmdline = fn_copy;
+  sema_init(&param.sema, 0);
+  tid = thread_create (thread_name, PRI_DEFAULT, start_process, &param);
   if (tid == TID_ERROR)
   {
-    palloc_free_page (fn_copy);
+    goto execute_fail_free;
+  }
+  // wait till child has signaled its status
+  sema_down(&param.sema);
+  if (param.success == false)
+  {
     goto execute_fail;
   }
   
@@ -317,9 +339,10 @@ process_execute (const char *cmdline)
   e->pid = pid;
   list_insert_ordered(&(process_states[parent_pid].to_wait_on_list), (struct list_elem *) e, &pid_item_less, NULL);
   lock_release(&pid_lock);
-  
   return pid;
   
+  execute_fail_free:
+  palloc_free_page (fn_copy);
   execute_fail:
   // reset process state
   lock_acquire(&pid_lock);
@@ -337,7 +360,8 @@ start_process (void *args)
   pid_t pid  = param->pid;
   pid_t parent_pid  = param->parent_pid;
   char *cmdline = param->cmdline;
-  free(args);
+  log_debug("@@@ start_process called: pid (%d) parent_pid (%d) cmdline %s @@@\n",
+          pid, parent_pid, cmdline);
   struct intr_frame if_;
   bool success;
   
@@ -360,8 +384,14 @@ start_process (void *args)
   palloc_free_page (cmdline);
   if (!success)
   {
+    // indicate failure to parent
+    param->success = false;
+    sema_up(&param->sema);
     process_exit_with_value(-1);
   }
+  // indicate success to parent
+  param->success = true;
+  sema_up(&param->sema);
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -385,7 +415,7 @@ start_process (void *args)
 int
 process_wait (pid_t child_pid) 
 {
-  log_debug("@@@ process_wait called @@@\n");
+  log_debug("@@@ process_wait called (%d) @@@\n", child_pid);
   // pid of calling process
   pid_t pid = thread_current()->pid;
   log_debug("+++ pid %d +++\n", pid);
@@ -497,6 +527,13 @@ process_exit_with_value (int exit_value)
   {
     process_states[pid].status = PROCESS_ZOMBIE;
     process_states[pid].exit_status_value = exit_value;
+    
+    // close open executeable file
+    if (process_states[pid].file != NULL)
+    {
+      file_close(process_states[pid].file);
+      process_states[pid].file = NULL;
+    }
   
     // only if we have a parent any process could wait on us
     log_debug("--- Signal condition due to process %d ---\n", cur->pid);
@@ -629,6 +666,7 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
 bool
 load (char *cmdline, void (**eip) (void), void **esp) 
 {
+  log_debug("@@@ load called: %s @@@\n", cmdline);
   struct thread *t = thread_current ();
   struct Elf32_Ehdr ehdr;
   struct file *file = NULL;
@@ -646,11 +684,20 @@ load (char *cmdline, void (**eip) (void), void **esp)
   /* Open executable file. */
   strtok_r(cmdline, " ", &save_ptr); /* terminate the filename with \n */
   file = filesys_open (cmdline);
+  
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", cmdline);
       goto done; 
     }
+  // prevent concurrent changes on this file
+  // as long as it is executed
+  file_deny_write(file);
+  // copy file pointer to prevent writes
+  // only works as long as the file is opened
+  lock_acquire (&pid_lock);
+  process_states[t->pid].file = file;
+  lock_release (&pid_lock);
 
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
@@ -735,7 +782,6 @@ load (char *cmdline, void (**eip) (void), void **esp)
 
  done:
   /* We arrive here whether the load is successful or not. */
-  file_close (file);
   return success;
 }
 

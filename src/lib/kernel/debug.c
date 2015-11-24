@@ -128,7 +128,7 @@ log_debug(const char *format, ...)
   va_list args;
   va_start (args, format);
 #ifndef NDEBUG
-//  printf (format, args);
+//  vprintf (format, args);
 #endif
   va_end (args);
 }
