@@ -159,6 +159,10 @@ clear_process_state_(pid_t pid, bool init_list)
 {
   ASSERT(lock_held_by_current_thread(&pid_lock));
   
+  // reset PID search start, as we now know
+  // this PID is no longer in use
+  pid_search_start = pid > 0 && pid < pid_search_start ? pid : pid_search_start;
+  
   // list manipulation is ok, because lock is held
   process_states[pid].tid = 0;
   process_states[pid].parent_pid = PID_ERROR;
