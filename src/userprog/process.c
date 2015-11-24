@@ -123,6 +123,30 @@ static pid_t
 allocate_pid (void) 
 {
   pid_t pid = PID_ERROR;
+  
+  /*
+  for (int i = 0; i < PID_MAX; i++)
+  {
+    switch(process_states[i].status)
+    {
+      case PROCESS_UNUSED:
+          putchar('.');
+          break;
+      case PROCESS_RUNNING:
+          putchar('R');
+          break;
+      case PROCESS_WAIT:
+          putchar('W');
+          break;
+      case PROCESS_ZOMBIE:
+          putchar('+');
+          break;
+      default:
+          break;
+    }
+  }
+  putchar('\n');
+  /**/
 
   lock_acquire (&pid_lock);
   pid_t pid_ = pid_search_start;
