@@ -47,6 +47,15 @@ struct pid_item
   pid_t pid;
 };
 
+
+static bool
+pid_item_less (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
+{
+  struct pid_item *pid_a = list_entry(a, struct pid_item, elem);
+  struct pid_item *pid_b = list_entry(b, struct pid_item, elem);
+  return pid_a->pid < pid_b->pid;
+}
+
 enum process_status
 {
   PROCESS_UNUSED,     /* indicates a free entry */
@@ -150,6 +159,7 @@ clear_process_state_(pid_t pid, bool init_list)
   process_states[pid].status = PROCESS_UNUSED;
   process_states[pid].exit_status_value = PROCESS_NO_EXIT_STATUS;
   process_states[pid].wait_for_child = 0;
+  process_states[pid].nextfd = 2;
   if (init_list)
   {
     // initialize a new list
@@ -158,15 +168,24 @@ clear_process_state_(pid_t pid, bool init_list)
   }
   else
   {
+    struct list_elem *e;
     // remove all entries from list
     while (!list_empty(&process_states[pid].to_wait_on_list))
     {
-      list_remove(list_front(&process_states[pid].to_wait_on_list));
+      e = list_front(&process_states[pid].to_wait_on_list);
+      list_remove(e);
+      free(e);
     }
+
     while (!list_empty(&process_states[pid].fdlist))
     {
-      list_remove(list_front(&process_states[pid].fdlist));
+      e = list_front(&process_states[pid].fdlist);
+      list_remove(e);
+      free(e);
     }
+
+    e = NULL;
+
   };
 }
 
@@ -243,8 +262,7 @@ process_execute (const char *cmdline)
   // aquire memory for list entry
   struct pid_item *e = malloc(sizeof(struct pid_item));
   e->pid = pid;
-  // TODO must be pushed sorted
-  list_push_front(&(process_states[parent_pid].to_wait_on_list), e);
+  list_insert_ordered(&(process_states[parent_pid].to_wait_on_list), (struct list_elem *) e, &pid_item_less, NULL);
   lock_release(&pid_lock);
   
   return pid;
@@ -362,6 +380,7 @@ process_wait (pid_t child_pid)
     // remove posibility to wait for child a second time
     list_remove(e);
     free(e);
+    e = NULL;
     // read exit value and reset state data
     res = process_states[child_pid].exit_status_value;
     clear_process_state(child_pid);
@@ -394,10 +413,10 @@ process_exit_with_value (int exit_value)
   
   // remove all child zombies
   // remove parent from rest of childs
-  struct list_elem *e;
+  struct list_elem *e, *e2;
   for (e = list_begin (&(process_states[cur->pid].to_wait_on_list));
        e != list_end (&(process_states[cur->pid].to_wait_on_list));
-       e = list_next (e))
+       )
   {
     struct pid_item *pid_i = list_entry (e, struct pid_item, elem);
     
@@ -411,6 +430,12 @@ process_exit_with_value (int exit_value)
       // remove us as parent, so that those processes will not wait on us
       process_states[pid_i->pid].parent_pid = PID_ERROR;
     }
+    
+    // clear list
+    e2 = list_next (e);
+    list_remove(e);
+    free(e);
+    e = e2;
   }
   
   // if we have a parent the process must persist until a possible later call to wait

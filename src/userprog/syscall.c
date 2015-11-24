@@ -72,6 +72,11 @@ syscall_remove (const char *file) {
 
 static int 
 syscall_open (const char *file) {
+  struct file *f = filesys_open(file);
+  if (f  == NULL)
+    return -1;
+  
+  
   return -1;
 }
 
