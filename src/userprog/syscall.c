@@ -1,15 +1,18 @@
-#include "userprog/syscall.h"
 #include <stdio.h>
 #include <debug.h>
 #include <stdbool.h>
 #include <string.h>
 #include <syscall-nr.h>
 #include "filesys/filesys.h"
+#include "filesys/file.h"
 #include "devices/shutdown.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "userprog/pagedir.h"
+#include "userprog/process.h"
+#include "userprog/syscall.h"
 #include "lib/user/syscall.h"
 
 static void syscall_handler (struct intr_frame *);
@@ -17,12 +20,17 @@ static void validate_user_string (char* user_str);
 static void validate_user_buffer (void* user_buf, unsigned size);
 static void* uaddr_to_kaddr (const void* uaddr);
 
+// all filesystem operations need to acuire the lock
+// before performing any action
+struct lock fs_lock;
+
 // TODO check filename to be correct e.g. length
 
 void
 syscall_init (void) 
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
+  lock_init(&fs_lock);
 }
 
 static void NO_RETURN
@@ -46,7 +54,9 @@ syscall_exec(const char *cmd_line) {
     return EXEC_ERROR;
   }
   
+  lock_acquire(&fs_lock);
   pid_t pid = process_execute(cmd_line);
+  lock_release(&fs_lock);
   if (pid == PID_ERROR)
   {
     return EXEC_ERROR;
@@ -63,17 +73,25 @@ syscall_wait (pid_t pid) {
 
 static bool 
 syscall_create (const char *file, unsigned initial_size) {
-  return filesys_create(file, initial_size);
+  lock_acquire(&fs_lock);
+  bool res = filesys_create(file, initial_size);
+  lock_release(&fs_lock);
+  return res;
 }
 
 static bool 
 syscall_remove (const char *file) {
-  return filesys_remove(file);
+  lock_acquire(&fs_lock);
+  bool res = filesys_remove(file);
+  lock_release(&fs_lock);
+  return res;
 }
 
 static int 
 syscall_open (const char *file) {
+  lock_acquire(&fs_lock);
   struct file *f = filesys_open(file);
+  lock_release(&fs_lock);
   if (f  == NULL)
     return -1;
   
