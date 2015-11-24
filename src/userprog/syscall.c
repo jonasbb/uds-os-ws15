@@ -122,7 +122,15 @@ syscall_write (int fd, const void *buffer, unsigned size) {
     putbuf(buffer, size);
     return size;
   } else
-    return -1;
+  {
+    struct file *f = get_fdlist(thread_current()->pid, fd);
+    if (!f) // file does not exist
+      return 0;
+    lock_acquire(&fs_lock);
+    int res = file_write(f, buffer, size);
+    lock_release(&fs_lock);
+    return res;
+  }
 }
 
 static void 
