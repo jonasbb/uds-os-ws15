@@ -65,7 +65,7 @@ enum process_status
 };
 
 // listitem for open file desricptor list
-struct fdlist
+struct fdlist_item
 {
   struct list_elem elem;
   int fd;
@@ -187,6 +187,59 @@ clear_process_state_(pid_t pid, bool init_list)
     e = NULL;
 
   };
+}
+
+
+/* Function to insert files into the fdlist.
+   Returns the fd used for this file */
+int
+insert_fdlist(int pid, struct file* f)
+{
+  struct fdlist_item *e = malloc(sizeof(struct fdlist_item));
+  e->file = f;
+  e->fd = process_states[pid].nextfd++;
+  list_push_back(&process_states[pid].fdlist, (struct list_elem *) e);
+  return e->fd;
+}
+
+
+/* Function to delete files from the fdlist.
+   Returns true if file was found otherwise returns false */
+bool
+delete_fdlist(int pid, int fd)
+{
+  struct list_elem *e;
+
+  for (e = list_begin (&process_states[pid].fdlist); e != list_end (&process_states[pid].fdlist);
+    e = list_next (e))
+    {
+      struct fdlist_item *f = list_entry (e, struct fdlist_item, elem);
+      if (f->fd == fd)
+      {
+        list_remove(&(f->elem));
+        return true;
+      }
+    }
+    return false;
+}
+
+/* Returns the file struct pointer given the pid and the filedescriptor.
+   If filedescriptor is unused returns NULL. */
+struct file*
+get_fdlist(int pid, int fd)
+{
+  struct list_elem *e;
+
+  for (e = list_begin (&process_states[pid].fdlist); e != list_end (&process_states[pid].fdlist);
+    e = list_next (e))
+    {
+      struct fdlist_item *f = list_entry (e, struct fdlist_item, elem);
+      if (f->fd == fd)
+      {
+        return f->file;
+      }
+    }
+    return NULL;
 }
 
 void
