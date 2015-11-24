@@ -150,7 +150,13 @@ syscall_tell (int fd) {
 
 static void 
 syscall_close (int fd) {
-  return;
+  struct file *f = get_fdlist(thread_current()->pid, fd);
+  if (!f) // file does not exist
+    return;
+  delete_fdlist(thread_current()->pid, fd);
+  lock_acquire(&fs_lock);
+  file_close(f);
+  lock_release(&fs_lock);
 }
 
 /*
