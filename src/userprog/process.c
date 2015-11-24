@@ -115,7 +115,7 @@ allocate_pid (void)
   pid_t pid_ = pid_search_start;
   while (pid_ <= PID_MAX)
   {
-    if (process_states[pid].status == PROCESS_UNUSED)
+    if (process_states[pid_].status == PROCESS_UNUSED)
     {
       // process unused
       pid = pid_;
@@ -123,6 +123,7 @@ allocate_pid (void)
       pid_search_start = pid+1;
       break;
     }
+    pid_++;
   }
   lock_release (&pid_lock);
 
