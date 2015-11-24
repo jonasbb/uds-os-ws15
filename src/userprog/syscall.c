@@ -94,9 +94,8 @@ syscall_open (const char *file) {
   lock_release(&fs_lock);
   if (f  == NULL)
     return -1;
-  
-  
-  return -1;
+  int fd = insert_fdlist(thread_current()->pid, f);
+  return fd;
 }
 
 static int 
