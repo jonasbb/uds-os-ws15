@@ -126,7 +126,7 @@ allocate_pid (void)
 
   lock_acquire (&pid_lock);
   pid_t pid_ = pid_search_start;
-  while (pid_ <= PID_MAX)
+  while (pid_ < PID_MAX)
   {
     if (process_states[pid_].status == PROCESS_UNUSED)
     {
