@@ -127,7 +127,13 @@ syscall_seek (int fd, unsigned position) {
 
 static unsigned 
 syscall_tell (int fd) {
-  return 1;
+  struct file *f = get_fdlist(thread_current()->pid, fd);
+  if (!f) // file does not exist
+    return -1;
+  lock_acquire(&fs_lock);
+  unsigned res = file_tell(f);
+  lock_release(&fs_lock);
+  return res;
 }
 
 static void 
