@@ -29,6 +29,20 @@ Lukas Krämer <lkraemer@mmci.uni-saarland.de>
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+We focus here on the structures which are important for argument
+passing and ignore the rest of the startup routine.
+
+struct start_process_param
+{
+  pid_t pid;
+  pid_t parent_pid;
+  char *cmdline;
+  struct semaphore sema;
+  bool success;
+};
+
+
+
 ---- ALGORITHMS ----
 
 >> A2: Briefly describe how you implemented argument parsing.  How do
