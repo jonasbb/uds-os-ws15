@@ -231,7 +231,7 @@ validate_user_buffer (void* user_buf, unsigned size)
   
   // bytes remaining in page
   unsigned remaining_bytes = PGSIZE - pg_ofs(user);
-  if (remaining_bytes > size)
+  if (remaining_bytes < size)
   {
     // buffer length is longer than the rest of the page
     size -= remaining_bytes;
