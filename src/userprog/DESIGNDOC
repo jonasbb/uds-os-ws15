@@ -159,6 +159,32 @@ See B8 for details.
 >> allocated resources (locks, buffers, etc.) are freed?  In a few
 >> paragraphs, describe the strategy or strategies you adopted for
 >> managing these issues.  Give an example.
+We split the error-handling (done in the syscall_handler) and the
+functional part (done in syscall_"function"). If we detect a error,
+we  ensure the freeing of all resources by calling the systemcall
+"exit" with value "-1". This systemcall frees all temporarily
+resources, which are stored in the "process_state_item".
+
+The following code snipet shows what we do if a address violation
+happens:
+The first check checks if its a user address in general.
+The second one if there is a page with this address for this process.
+If any of these fails we exit the process with exitcode "-1".
+
+if (is_user_vaddr(uaddr)){
+    void* page = pagedir_get_page(thread_current()->pagedir, uaddr);
+    if (page) {
+      return page;
+    } 
+    else {
+      syscall_exit(-1); /* address violation */
+      NOT_REACHED ();
+    }
+  }
+  else {
+    syscall_exit(-1); /* address violation */
+    NOT_REACHED ();
+  }
 
 ---- SYNCHRONIZATION ----
 
