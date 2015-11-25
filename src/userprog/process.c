@@ -146,7 +146,7 @@ allocate_pid (void)
     }
   }
   putchar('\n');
-  /**/
+  */
 
   lock_acquire (&pid_lock);
   pid_t pid_ = pid_search_start;
@@ -222,21 +222,27 @@ clear_process_state_(pid_t pid, bool init_list)
       free(e);
     }
 
-    while (!list_empty(&process_states[pid].fdlist))
-    {
-      // TODO make close_fd function
-      e = list_front(&process_states[pid].fdlist);
-      struct fdlist_item *f = list_entry (e, struct fdlist_item, elem);
-      file_close(f->file);
-      list_remove(e);
-      free(e);
-    }
+    close_fdlist(pid);
 
     e = NULL;
 
   };
 }
 
+/* Function to cleanup fdlist. */
+void
+close_fdlist(int pid)
+{
+  struct list_elem *e;
+  while (!list_empty(&process_states[pid].fdlist))
+    {
+      e = list_front(&process_states[pid].fdlist);
+      struct fdlist_item *f = list_entry (e, struct fdlist_item, elem);
+      file_close(f->file);
+      list_remove(e);
+      free(e);
+    }
+}
 
 /* Function to insert files into the fdlist.
    Returns the fd used for this file */
@@ -312,7 +318,8 @@ process_init(void)
   
   lock_acquire (&pid_lock);
   // init process state list
-  for (pid_t i = 0; i < PID_MAX; i++)
+  pid_t i;
+  for (i = 0; i < PID_MAX; i++)
   {
     clear_process_state_(i, true);
   }
@@ -570,7 +577,7 @@ process_exit_with_value (int exit_value)
   {
     process_states[pid].status = PROCESS_ZOMBIE;
     process_states[pid].exit_status_value = exit_value;
-    
+    close_fdlist(pid);
     // close open executeable file
     if (process_states[pid].file != NULL)
     {
@@ -978,7 +985,7 @@ setup_stack (void **esp_, char *cmdline_, char **save_ptr)
         // NULL pointer to terminate the argv list
         PUSH(esp, (uint32_t) NULL);
         // push first token
-        PUSH(esp, cmdline);
+        PUSH(esp, (uint32_t) cmdline);
         argc++;
         //DEBUG log_debug("ArgN: %2d\tADDR: %p\tESP: %p\n", argc, cmdline, esp);
         esp_start = esp;
@@ -987,7 +994,7 @@ setup_stack (void **esp_, char *cmdline_, char **save_ptr)
         // push char* from left to right onto the stack
         while ((token = strtok_r(NULL, " ", save_ptr)) != NULL)
         {
-          PUSH(esp, token);
+          PUSH(esp, (uint32_t) token);
           argc++;
           //DEBUG log_debug("ArgN: %2d\tADDR: %p\tESP: %p\n", argc, token, esp);
         }
@@ -1010,7 +1017,7 @@ setup_stack (void **esp_, char *cmdline_, char **save_ptr)
         
         // push argv itself (char**)
         esp_end = esp;
-        PUSH(esp, esp_end);
+        PUSH(esp, (uint32_t) esp_end);
         
         // push argc value
         PUSH(esp, argc);

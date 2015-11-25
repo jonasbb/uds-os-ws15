@@ -5,7 +5,9 @@
 #include <syscall-nr.h>
 #include "filesys/filesys.h"
 #include "filesys/file.h"
+#include "filesys/directory.h"
 #include "devices/shutdown.h"
+#include "devices/input.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/synch.h"
@@ -73,6 +75,7 @@ syscall_wait (pid_t pid) {
 
 static bool 
 syscall_create (const char *file, unsigned initial_size) {
+  if (strlen(file)>NAME_MAX) return false;
   lock_acquire(&fs_lock);
   bool res = filesys_create(file, initial_size);
   lock_release(&fs_lock);
@@ -81,6 +84,7 @@ syscall_create (const char *file, unsigned initial_size) {
 
 static bool 
 syscall_remove (const char *file) {
+  if (strlen(file)>NAME_MAX) return false;
   lock_acquire(&fs_lock);
   bool res = filesys_remove(file);
   lock_release(&fs_lock);
@@ -89,6 +93,7 @@ syscall_remove (const char *file) {
 
 static int 
 syscall_open (const char *file) {
+  if (strlen(file)>NAME_MAX) return false;
   lock_acquire(&fs_lock);
   struct file *f = filesys_open(file);
   lock_release(&fs_lock);
@@ -113,7 +118,7 @@ static int
 syscall_read (int fd, void *buffer, unsigned size) {
   if (fd == 0)
   {
-    int i;
+    unsigned i;
     char *out = buffer;
     for(i = 0;i < size; i++, out++)
     {
@@ -154,8 +159,7 @@ static void
 syscall_seek (int fd, unsigned position) {
   struct file *f = get_fdlist(thread_current()->pid, fd);
   if (!f) // file does not exist
-    return 0;
-  return file_seek(get_fdlist(thread_current()->pid, fd), position);
+    return;
   lock_acquire(&fs_lock);
   file_seek(f, position);
   lock_release(&fs_lock);
@@ -165,7 +169,7 @@ static unsigned
 syscall_tell (int fd) {
   struct file *f = get_fdlist(thread_current()->pid, fd);
   if (!f) // file does not exist
-    return -1;
+    return 0;
   lock_acquire(&fs_lock);
   unsigned res = file_tell(f);
   lock_release(&fs_lock);
