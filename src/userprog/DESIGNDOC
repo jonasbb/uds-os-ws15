@@ -36,10 +36,13 @@ struct start_process_param
 {
   pid_t pid;
   pid_t parent_pid;
-  char *cmdline;
+  char *cmdline; //complete argument string
   struct semaphore sema;
   bool success;
 };
+This struct contains the complete cmdline string given to the exec syscall.
+The rest of the members can be ignored because there are just important
+for the rest of the startup.
 
 
 
@@ -92,6 +95,77 @@ space as an argument.
 >> B1: Copy here the declaration of each new or changed `struct' or
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
+
+All filesystem operations need to acuire the lock before
+performing any action.
+struct lock fs_lock;
+
+Enum to descripe the status of status.
+enum process_status
+{
+  PROCESS_UNUSED,     /* indicates a free entry */
+  PROCESS_RUNNING,    /* Normal state */
+  PROCESS_WAIT,       /* indicates process called wait() */
+  PROCESS_ZOMBIE      /* Process is dead but parent did not call wait() yet */
+};
+
+Listitem for open file desricptor list per process.
+struct fdlist_item
+{
+  struct list_elem elem;
+  int fd;
+  struct file *file;
+};
+
+This struct contains the whole status of a process including the executable file,
+the open file descriptor list and the next file descriptor which is free. 
+struct process_state_item
+{
+  // tid of this process
+  tid_t tid;
+  // pid of parent process
+  pid_t parent_pid;
+  
+  // executeable file, to prevent writes on this file
+  struct file *file;
+  
+  // status
+  enum process_status status;
+  // exit status as set by exit()
+  int exit_status_value;
+  
+  // if process_state == PROCESS_WAIT the pid
+  // of the process we are waiting on
+  pid_t wait_for_child;
+  
+  // un-wait()-ed child processes
+  // list must be ordered
+  struct list to_wait_on_list;
+  
+  // open file descriptor list
+  int nextfd;
+  struct list fdlist;
+};
+
+Array which contains every single process status.
+static struct process_state_item process_states[PID_MAX];
+
+Set to the lowest pid we have to check for a
+free pid value. If we reclaim a pid and it 
+is lower than pid_search_start we of course
+have to set pid_search_start to the reclaimed
+value.
+static pid_t pid_search_start = 1;
+
+A general lock for all pid related things.
+static struct lock pid_lock;
+
+A condition to wait on any exit of any other process.
+static struct condition process_exit_cond;
+
+We don't use the ident-function from tid_t to pid_t, so we to create
+a different type.
+typedef int pid_t;
 
 >> B2: Describe how file descriptors are associated with open files.
 >> Are file descriptors unique within the entire OS or just within a
