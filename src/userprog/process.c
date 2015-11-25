@@ -221,7 +221,8 @@ clear_process_state_(pid_t pid, bool init_list)
       list_remove(e);
       free(e);
     }
-
+    
+    // Cleanup fdlist
     close_fdlist(pid);
 
     e = NULL;

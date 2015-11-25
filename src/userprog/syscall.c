@@ -22,17 +22,11 @@ static void validate_user_string (char* user_str);
 static void validate_user_buffer (void* user_buf, unsigned size);
 static void* uaddr_to_kaddr (const void* uaddr);
 
-// all filesystem operations need to acuire the lock
-// before performing any action
-struct lock fs_lock;
-
-// TODO check filename to be correct e.g. length
-
 void
 syscall_init (void) 
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
-  lock_init(&fs_lock);
+  
 }
 
 static void NO_RETURN
@@ -56,9 +50,9 @@ syscall_exec(const char *cmd_line) {
     return EXEC_ERROR;
   }
   
-  lock_acquire(&fs_lock);
+  
   pid_t pid = process_execute(cmd_line);
-  lock_release(&fs_lock);
+
   if (pid == PID_ERROR)
   {
     return EXEC_ERROR;
@@ -76,27 +70,27 @@ syscall_wait (pid_t pid) {
 static bool 
 syscall_create (const char *file, unsigned initial_size) {
   if (strlen(file)>NAME_MAX) return false;
-  lock_acquire(&fs_lock);
+
   bool res = filesys_create(file, initial_size);
-  lock_release(&fs_lock);
+
   return res;
 }
 
 static bool 
 syscall_remove (const char *file) {
   if (strlen(file)>NAME_MAX) return false;
-  lock_acquire(&fs_lock);
+
   bool res = filesys_remove(file);
-  lock_release(&fs_lock);
+
   return res;
 }
 
 static int 
 syscall_open (const char *file) {
   if (strlen(file)>NAME_MAX) return false;
-  lock_acquire(&fs_lock);
+
   struct file *f = filesys_open(file);
-  lock_release(&fs_lock);
+
   if (f  == NULL)
     return -1;
   int fd = insert_fdlist(thread_current()->pid, f);
@@ -108,9 +102,9 @@ syscall_filesize (int fd) {
   struct file *f = get_fdlist(thread_current()->pid, fd);
   if (!f) // file does not exist
     return -1;
-  lock_acquire(&fs_lock);
+
   int res = file_length(f);
-  lock_release(&fs_lock);
+
   return res;
 }
 
@@ -129,9 +123,9 @@ syscall_read (int fd, void *buffer, unsigned size) {
     struct file *f = get_fdlist(thread_current()->pid, fd);
     if (!f) // file does not exist
       return -1;
-    lock_acquire(&fs_lock);
+
     int res = file_read(f, buffer, size);
-    lock_release(&fs_lock);
+
     return res;
   }
 }
@@ -148,9 +142,9 @@ syscall_write (int fd, const void *buffer, unsigned size) {
     struct file *f = get_fdlist(thread_current()->pid, fd);
     if (!f) // file does not exist
       return 0;
-    lock_acquire(&fs_lock);
+
     int res = file_write(f, buffer, size);
-    lock_release(&fs_lock);
+
     return res;
   }
 }
@@ -160,9 +154,9 @@ syscall_seek (int fd, unsigned position) {
   struct file *f = get_fdlist(thread_current()->pid, fd);
   if (!f) // file does not exist
     return;
-  lock_acquire(&fs_lock);
+
   file_seek(f, position);
-  lock_release(&fs_lock);
+
 }
 
 static unsigned 
@@ -170,9 +164,9 @@ syscall_tell (int fd) {
   struct file *f = get_fdlist(thread_current()->pid, fd);
   if (!f) // file does not exist
     return 0;
-  lock_acquire(&fs_lock);
+
   unsigned res = file_tell(f);
-  lock_release(&fs_lock);
+
   return res;
 }
 
@@ -182,9 +176,9 @@ syscall_close (int fd) {
   if (!f) // file does not exist
     return;
   delete_fdlist(thread_current()->pid, fd);
-  lock_acquire(&fs_lock);
+
   file_close(f);
-  lock_release(&fs_lock);
+
 }
 
 /*
