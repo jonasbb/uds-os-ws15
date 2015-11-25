@@ -997,6 +997,17 @@ setup_stack (void **esp_, char *cmdline_, char **save_ptr)
           PUSH(esp, (uint32_t) token);
           argc++;
           //DEBUG log_debug("ArgN: %2d\tADDR: %p\tESP: %p\n", argc, token, esp);
+          
+          // check for stack page overflow
+          // bottom of stack page needs space for at least
+          // the thread struct and 3 more values
+          if ((uint32_t)((void*)esp - pg_round_down(esp)) <
+              (uint32_t)(sizeof(struct thread) + 3 * sizeof(uint32_t)))
+          {
+            // stack would overflow
+            success = false;
+            goto no_success;
+          }
         }
         esp_end = esp;
         
@@ -1028,7 +1039,10 @@ setup_stack (void **esp_, char *cmdline_, char **save_ptr)
         //DEBUG hex_dump(cmdline, cmdline, 0x20, true);
         //DEBUG hex_dump(esp-0x15, esp-0x15, 0x80, true);        
       }
-      else
+      
+      no_success:
+      // cleanup in case of error
+      if (!success)
       {
         palloc_free_page (kpage);
         palloc_free_page (kpage + PGSIZE);
