@@ -168,11 +168,15 @@ Depending on this status bit we either return -1 or the new pid.
 >> that all resources are freed in each case?  How about when P
 >> terminates without waiting, before C exits?  After C exits?  Are
 >> there any special cases?
-TODO
 We introduced a new struct process_state_item which keeps track of all
 the resources and states associated with a process. It includes a list
 of child pids, the process exit value and the parent pid.
+All access to the array of process_state_item, each process_state_item
+and all values in process_state_item are protected with the pid_lock
+such that no race conditions can occur. There are no other unprotected
+shared memory accesses.
 
+Exit of processes.
 Always: Cleanup for child processes
 	All child processes lose their parent in this process, so they will not
 	use resources, even though no parent will ever call wait. All child
@@ -185,6 +189,11 @@ Case 1: Parent process is still running
 Case 2: Parent process not running
 	Cleanup all resources, do not keep exit status as wait can never be
 	called.
+
+Furthermore, our cleanup function clear_process_state_ in process.c,
+which resets our process_state_items releases all resources, so that
+even if cleanup is skiped before, at the last point we always release
+resources.
 
 
 ---- RATIONALE ----
