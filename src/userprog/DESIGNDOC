@@ -48,14 +48,41 @@ struct start_process_param
 >> A2: Briefly describe how you implemented argument parsing.  How do
 >> you arrange for the elements of argv[] to be in the right order?
 >> How do you avoid overflowing the stack page?
+First the kernel verifies that the provided string is a valid string
+for this user process. Then this string is passed to process_execute,
+where any trailing spaces get ignored. Here we also extract the file name
+of the new process. The string (without leading spaces) is copied onto
+a new page which is passed to start_process which passes it to load which
+passes it to setup_stack().
+In setup_stack() we allocate a new user space page and copy the content onto
+the new page. We install this new page into the page table of the new process.
+We then call strtok_r for all values on this new page. Each return value is
+put onto the stack for the new process. Finally, we reverse the order of char*
+on the stack to get the correct layout.
+Because we copy all string arguments onto a new page we have a complete page
+for argc and argv arguments.
+We also ensure, for each entry in argv, that the stack has enough space to hold
+3 more values, the stack frame for calling a function, and the struct thread
+which always resides at the bottom of the thread page.
 
 ---- RATIONALE ----
 
 >> A3: Why does Pintos implement strtok_r() but not strtok()?
+strtok() is not thread secure, meaning if multiple threads use it independently
+of each other the results will be unpredictable.
+
+Quote from the documentation:
+    Uses global data, so it is unsafe in threaded programs such as kernels. Use
+	strtok_r() instead, and see its source code in lib/string.c for documentation
+	and an example. 
 
 >> A4: In Pintos, the kernel separates commands into a executable name
 >> and arguments.  In Unix-like systems, the shell does this
 >> separation.  Identify at least two advantages of the Unix approach.
+Argument parsing handles untrusted user input. It is therefore more secure
+to do userspace parsing as failures or programming errors cannot corrupt the kernel.
+It is also possible to support different escaping schemas e.g. to pass a
+space as an argument.
 
 			     SYSTEM CALLS
 			     ============
@@ -69,11 +96,26 @@ struct start_process_param
 >> B2: Describe how file descriptors are associated with open files.
 >> Are file descriptors unique within the entire OS or just within a
 >> single process?
+File descriptors are generated independently for each process as
+a unique increasing sequence starting with value 2 as the values
+0 and 1 are reserved for special purpose.
 
 ---- ALGORITHMS ----
 
 >> B3: Describe your code for reading and writing user data from the
 >> kernel.
+Our kernel first performs a validation step for reference data like
+void* or char*. Afterwards it uses the fact that we always have virtual
+memory and use the given pointers directly as the page table is
+still the same.
+
+To validate char* we search for the end of string (\0) and verify that
+the user process owns each page, before we derefference the char*.
+Validation of void* is similar, but we increment the pointer always
+to the start of the next page, as we only need to check, that the user
+process owns each page, but do not need to check for the end as we
+are given the size of the buffer.
+If any page is not owned by the user process the process is terminated.
 
 >> B4: Suppose a system call causes a full page (4,096 bytes) of data
 >> to be copied from user space into the kernel.  What is the least
@@ -81,9 +123,28 @@ struct start_process_param
 >> (e.g. calls to pagedir_get_page()) that might result?  What about
 >> for a system call that only copies 2 bytes of data?  Is there room
 >> for improvement in these numbers, and how much?
+Each system call might use a different number of checks, one for each
+argument, which we will ignore here, but because we have at least one
+parameter this will be at least one.
+
+The pointer is passed down to validate_user_buffer or validate_user_string.
+For each page in the range they call once uaddr_to_kaddr which calls
+pagedir_get_page() one time, so we have one call to pagedir_get_page()
+per actual page with data. A full page of data can occupy one page fully
+or two pages partially but never three pages, if the range is consecutive.
+The same holds true for two bytes, they may occupy one page or two pages.
+The minimal number is one and the maximum is two in both cases. Improvements
+could only be made if we require the data to be on one page e.g. by
+changing the syscall API such that all pointers must start at the beginning
+of a page, which forces both inputs to only occupy one page.
+Other improvements are not possible as we need to check each page once.
 
 >> B5: Briefly describe your implementation of the "wait" system call
 >> and how it interacts with process termination.
+Our syscall only calls process_wait which is blocking until the return
+value is known. All interactions with process termination are handled
+in process_wait, but the most important part is a wait on a condition.
+See B8 for details.
 
 >> B6: Any access to user program memory at a user-specified address
 >> can fail due to a bad pointer value.  Such accesses must cause the
@@ -105,6 +166,15 @@ struct start_process_param
 >> fails, so it cannot return before the new executable has completed
 >> loading.  How does your code ensure this?  How is the load
 >> success/failure status passed back to the thread that calls "exec"?
+The parameter struct given to start_process contains a semaphore for
+synchronization. We use a binary semaphore instead of a lock to ensure
+that the parent process never can precede until the child knows its
+status. If the child either has started successfully or not it sets
+a status bit in the parameter struct. Only two processes have access
+to this struct, parent and child, and the parent waits on the semaphore
+before accessing the status bit. The child never touches the struct
+after calling sema_up so no data races are possible here.
+Depending on this status bit we either return -1 or the new pid.
 
 >> B8: Consider parent process P with child process C.  How do you
 >> ensure proper synchronization and avoid race conditions when P
@@ -112,17 +182,62 @@ struct start_process_param
 >> that all resources are freed in each case?  How about when P
 >> terminates without waiting, before C exits?  After C exits?  Are
 >> there any special cases?
+TODO
+We introduced a new struct process_state_item which keeps track of all
+the resources and states associated with a process. It includes a list
+of child pids, the process exit value and the parent pid.
+
+Always: Cleanup for child processes
+	All child processes lose their parent in this process, so they will not
+	use resources, even though no parent will ever call wait. All child
+	processes which already terminated and are now zombies are also cleaned up.
+
+Case 1: Parent process is still running
+	The process performs its child cleanup. Afterwards it keeps the exit
+	status and sets the process state to zombie meaning wait can be called
+	and the process already terminated.
+Case 2: Parent process not running
+	Cleanup all resources, do not keep exit status as wait can never be
+	called.
+
 
 ---- RATIONALE ----
 
 >> B9: Why did you choose to implement access to user memory from the
 >> kernel in the way that you did?
+Performing a check first is easy to implement. The downside is the overhead
+in performance for correctly working user processes as every time the
+arguments are checked. If we know all memory accesses within the bounds,
+either string end or size for buffer, are valid all further processing
+only needs to ensure that it only accesses the buffers correct, which
+is much more easy.
+Further, the documentation mentioned this as the easier case so we
+implemented it this way.
 
 >> B10: What advantages or disadvantages can you see to your design
 >> for file descriptors?
+Creating a new value for filedescriptor instead of using the struct file*
+hides pointers to kernel data, which might give an attacker easier access
+to important kernel datastructures, as he has a memory location to start
+with. This is a better seperation between user and kernel space.
+This also allows for better checking of validity of user supplied data
+compared to the case we would use pointers as file descriptors.
+
+Obvious disadvantage is that each access via file descriptors triggers
+a lookup in a linked list to search for the correct struct file*.
+This is overhead compared to the case that we would use the struct
+file* as file descriptor.
 
 >> B11: The default tid_t to pid_t mapping is the identity mapping.
 >> If you changed it, what advantages are there to your approach?
+We sample pid_t's from a new range of PID_MAX many values starting
+with 0. The first user process therefore has pid 1. Creating a new
+value hides pointers to kernel data, which might give an attacker
+easier access to important kernel datastructures, as he has a memory
+location to start with. This is a better seperation between user
+and kernel space. More importantly this change allows us to store
+all process_state_items in a large array with fast access instead of
+using a list to search for each pid.
 
 			   SURVEY QUESTIONS
 			   ================
