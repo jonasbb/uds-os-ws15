@@ -917,14 +917,14 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
       /* Get a page of memory. */
-      uint8_t *kpage = palloc_get_page (PAL_USER);
+      uint8_t *kpage = frame_get_free();
       if (kpage == NULL)
         return false;
 
       /* Load this page. */
       if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
         {
-          palloc_free_page (kpage);
+          frame_remove(kpage);
           return false; 
         }
       memset (kpage + page_read_bytes, 0, page_zero_bytes);
@@ -932,7 +932,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       /* Add the page to the process's address space. */
       if (!install_page (upage, kpage, writable)) 
         {
-          palloc_free_page (kpage);
+          frame_remove(kpage);
           return false; 
         }
 
@@ -951,18 +951,21 @@ setup_stack (void **esp_, char *cmdline_, char **save_ptr)
 {
   ASSERT(save_ptr != NULL);
   
-  uint8_t *kpage;
+  uint8_t *kpage1, *kpage2;
   bool success = false;
 
-  kpage = palloc_get_multiple (PAL_USER | PAL_ZERO, 2);
-  if (kpage != NULL) 
+  kpage1 = frame_get_free();
+  kpage2 = frame_get_free();
+  if (kpage1 != NULL && kpage2 != NULL)
     {
-      success = install_page (((uint8_t *) PHYS_BASE) - 2*PGSIZE, kpage, true)
-             && install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage + PGSIZE, true);
+      memset(kpage1, 0, PGSIZE);
+      memset(kpage2, 0, PGSIZE);
+      success = install_page (((uint8_t *) PHYS_BASE) - 2*PGSIZE, kpage1, true);
+      success = success && install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage2, true);
       if (success)
       {
         // copy argument to upper page
-        memcpy(kpage + PGSIZE, cmdline_, PGSIZE);
+        memcpy(kpage2, cmdline_, PGSIZE);
         char *cmdline = (char*)((uint8_t *) PHYS_BASE) - PGSIZE; /* nice pointer to work with */
         // since cmdline_ starts at a page save_ptr can be used
         // if we replace the page part but not the offset
@@ -1045,8 +1048,8 @@ setup_stack (void **esp_, char *cmdline_, char **save_ptr)
       // cleanup in case of error
       if (!success)
       {
-        palloc_free_page (kpage);
-        palloc_free_page (kpage + PGSIZE);
+        frame_remove(kpage1);
+        frame_remove(kpage2);
       }
     }
   return success;

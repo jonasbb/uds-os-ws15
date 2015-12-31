@@ -10,6 +10,7 @@
 #include "threads/loader.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "vm/frames.h"
 
 /* Page allocator.  Hands out memory in page-size (or
    page-multiple) chunks.  See malloc.h for an allocator that
@@ -57,8 +58,12 @@ palloc_init (size_t user_page_limit)
 
   /* Give half of memory to kernel, half to user. */
   init_pool (&kernel_pool, free_start, kernel_pages, "kernel pool");
-  init_pool (&user_pool, free_start + kernel_pages * PGSIZE,
-             user_pages, "user pool");
+
+  // PROJECT 3
+  // replace given allocator with frame table
+  //init_pool (&user_pool, free_start + kernel_pages * PGSIZE,
+  //           user_pages, "user pool");
+  frame_init(user_pages, free_start + kernel_pages * PGSIZE);
 }
 
 /* Obtains and returns a group of PAGE_CNT contiguous free pages.
@@ -70,6 +75,10 @@ palloc_init (size_t user_page_limit)
 void *
 palloc_get_multiple (enum palloc_flags flags, size_t page_cnt)
 {
+  // PROJECT 3
+  // remove user pool with frame table
+  ASSERT((flags & PAL_USER) == 0);
+
   struct pool *pool = flags & PAL_USER ? &user_pool : &kernel_pool;
   void *pages;
   size_t page_idx;
@@ -110,6 +119,10 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt)
 void *
 palloc_get_page (enum palloc_flags flags) 
 {
+  // PROJECT 3
+  // remove user pool with frame table
+  ASSERT((flags & PAL_USER) == 0);
+
   return palloc_get_multiple (flags, 1);
 }
 
@@ -126,10 +139,19 @@ palloc_free_multiple (void *pages, size_t page_cnt)
 
   if (page_from_pool (&kernel_pool, pages))
     pool = &kernel_pool;
+  else {
+    // PROJECT 3
+    // replace user pool
+    // redirect free call
+    frame_remove_mult(pages, page_cnt);
+    return;
+  }
+  /*
   else if (page_from_pool (&user_pool, pages))
     pool = &user_pool;
   else
     NOT_REACHED ();
+  */
 
   page_idx = pg_no (pages) - pg_no (pool->base);
 
