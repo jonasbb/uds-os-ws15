@@ -2,6 +2,7 @@
 #define THREADS_PTE_H
 
 #include "threads/vaddr.h"
+#include <stdint.h>
 
 /* Functions and macros for working with x86 hardware page
    tables.
@@ -66,6 +67,19 @@ static inline uintptr_t pd_no (const void *va) {
 #define PTE_U 0x4               /* 1=user/kernel, 0=kernel only. */
 #define PTE_A 0x20              /* 1=accessed, 0=not acccessed. */
 #define PTE_D 0x40              /* 1=dirty, 0=not dirty (PTEs only). */
+struct pagetable_entry {
+    bool present : 1;
+    bool writable : 1;
+    bool kernel : 1;
+    bool unused1 : 1;
+    bool unused2 : 1;
+    bool accessed : 1;
+    bool dirty : 1;
+    bool unused3 : 1;
+    bool unused4 : 1;
+    unsigned int available : 3;
+    uint32_t address : 20;
+};
 
 /* Returns a PDE that points to page table PT. */
 static inline uint32_t pde_create (uint32_t *pt) {
