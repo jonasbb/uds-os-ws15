@@ -21,6 +21,8 @@
 #include "threads/malloc.h"
 #include "lib/kernel/list.h"
 #include "lib/user/syscall.h"
+#include "vm/spage.h"
+#include "vm/frames.h"
 
 #define PID_ERROR ((pid_t) -1)
 #define PID_MAX ((pid_t) 256)
@@ -595,6 +597,9 @@ process_exit_with_value (int exit_value)
     clear_process_state(pid);
   }
   lock_release(&pid_lock);
+
+  // cleanup additional entries
+  spage_destroy(&cur->sup_pagetable);
   
   thread_exit();
 }
@@ -832,6 +837,7 @@ load (char *cmdline, void (**eip) (void), void **esp)
   success = true;
 
  done:
+  log_debug("@@@ load status: %s @@@\n", success ? "success" : "!!PROBLEM!!");
   /* We arrive here whether the load is successful or not. */
   return success;
 }
@@ -907,43 +913,71 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   ASSERT (pg_ofs (upage) == 0);
   ASSERT (ofs % PGSIZE == 0);
 
-  // TODO replace with lazy loading via sup. page table
+  while (read_bytes > 0 || zero_bytes > 0) {
+    size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
+    size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
-  file_seek (file, ofs);
-  while (read_bytes > 0 || zero_bytes > 0) 
-    {
-      /* Calculate how to fill this page.
-         We will read PAGE_READ_BYTES bytes from FILE
-         and zero the final PAGE_ZERO_BYTES bytes. */
-      size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
-      size_t page_zero_bytes = PGSIZE - page_read_bytes;
-
-      /* Get a page of memory. */
-      uint8_t *kpage = frame_get_free();
-      if (kpage == NULL)
-        return false;
-
-      /* Load this page. */
-      if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
-        {
-          frame_remove(kpage);
-          return false; 
-        }
-      memset (kpage + page_read_bytes, 0, page_zero_bytes);
-
-      /* Add the page to the process's address space. */
-      if (!install_page (upage, kpage, writable)) 
-        {
-          frame_remove(kpage);
-          return false; 
-        }
-
-      /* Advance. */
-      read_bytes -= page_read_bytes;
-      zero_bytes -= page_zero_bytes;
-      upage += PGSIZE;
+    bool res;
+    if (read_bytes > 0) {
+      res = spage_map_file(file, ofs, upage, writable, page_read_bytes);
+    } else {
+      res = spage_map_zero(upage, writable);
     }
+    if (res == false) {
+      return false;
+    }
+
+    /* Advance */
+/*
+    printf("upage: %08x\nread_bytes: %d\nzero_bytes: %d\npage_read_bytes: %d\npage_zero_bytes: %d\nPGIZE: %d\n",
+           upage,
+           read_bytes,
+           zero_bytes,
+           page_read_bytes,
+           page_zero_bytes,
+           PGSIZE);
+*/
+    read_bytes -= page_read_bytes;
+    zero_bytes -= page_zero_bytes;
+    upage += PGSIZE;
+    ofs += PGSIZE;
+  }
   return true;
+
+//  file_seek (file, ofs);
+//  while (read_bytes > 0 || zero_bytes > 0)
+//    {
+//      /* Calculate how to fill this page.
+//         We will read PAGE_READ_BYTES bytes from FILE
+//         and zero the final PAGE_ZERO_BYTES bytes. */
+//      size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
+//      size_t page_zero_bytes = PGSIZE - page_read_bytes;
+//
+//      /* Get a page of memory. */
+//      uint8_t *kpage = palloc_get_page (PAL_USER);
+//      if (kpage == NULL)
+//        return false;
+//
+//      /* Load this page. */
+//      if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
+//        {
+//          palloc_free_page (kpage);
+//          return false;
+//        }
+//      memset (kpage + page_read_bytes, 0, page_zero_bytes);
+//
+//      /* Add the page to the process's address space. */
+//      if (!install_page (upage, kpage, writable))
+//        {
+//          palloc_free_page (kpage);
+//          return false;
+//        }
+//
+//      /* Advance. */
+//      read_bytes -= page_read_bytes;
+//      zero_bytes -= page_zero_bytes;
+//      upage += PGSIZE;
+//    }
 }
 
 /* Create a minimal stack by mapping a zeroed page at the top of

@@ -293,7 +293,40 @@ thread_exit (void)
   process_exit ();
 #endif
   // detection for memory leaks
-  ASSERT(hash_empty(&thread_current()->sup_pagetable));
+  /*
+  if (!hash_empty(&thread_current()->sup_pagetable)) {
+    struct hash_elem *e;
+    struct hash_iterator iter;
+    hash_first(&iter, &thread_current()->sup_pagetable);
+    e = hash_next(&iter);
+    printf("LEFTOVER SUP. PAGE TABLE ENTRIES:\n");
+    while(e != NULL) {
+      struct spage_table_entry *spte = hash_entry(e,
+                                                  struct spage_table_entry,
+                                                  elem);
+      char *back, perm[3];
+      switch(spte->backing) {
+      case SWAPPED:
+        back = "SWAPPED";
+        break;
+      case FROMFILE:
+        back = "FROMFILE";
+        break;
+      case ZEROPAGE:
+        back = "ZEROPAGE";
+        break;
+      default:
+        NOT_REACHED();
+      }
+      printf("  vaddr: 0x%08x, backing: %s, perm: %x\n",
+             spte->vaddr,
+             back,
+             spte->perm);
+      e = hash_next(&iter);
+    }
+  }*/
+  // TODO
+  //ASSERT(hash_empty(&thread_current()->sup_pagetable));
 
   /* Remove thread from all threads list, set our status to dying,
      and schedule another process.  That process will destroy us

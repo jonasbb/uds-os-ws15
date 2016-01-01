@@ -1,11 +1,13 @@
 #include "userprog/exception.h"
+#include <debug.h>
 #include <inttypes.h>
 #include <stdio.h>
 #include "userprog/gdt.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
-#include <debug.h>
+#include "threads/vaddr.h"
 #include "userprog/process.h"
+#include "vm/spage.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -155,7 +157,8 @@ page_fault (struct intr_frame *f)
   {
     if (not_present) {
         // check if access is valid anyway and map page if so
-        if (!spage_valid_and_load(fault_addr)) {
+        bool tmp = spage_valid_and_load(pg_round_down(fault_addr));
+        if (!tmp) {
             // access to invalid address
             log_debug ("Handled page fault:\n");
             log_debug ("Page fault at %p: %s error %s page in %s context.\n",
@@ -167,9 +170,11 @@ page_fault (struct intr_frame *f)
             NOT_REACHED();
         }
         return;
+    } else {
+        process_exit_with_value(-1);
+        NOT_REACHED();
     }
-    process_exit_with_value(-1);
-    NOT_REACHED();
+    return;
   }
 
   /* To implement virtual memory, delete the rest of the function
