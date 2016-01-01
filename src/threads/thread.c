@@ -14,6 +14,7 @@
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
+#include "vm/spage.h"
 
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
@@ -198,6 +199,12 @@ thread_create (const char *name, int priority,
   sf->eip = switch_entry;
   sf->ebp = 0;
 
+  // initialize sup. page table
+  hash_init(&t->sup_pagetable,
+            &spte_hash,
+            &spte_less,
+            NULL);
+
   /* Add to run queue. */
   thread_unblock (t);
 
@@ -285,6 +292,8 @@ thread_exit (void)
 #ifdef USERPROG
   process_exit ();
 #endif
+  // detection for memory leaks
+  ASSERT(hash_empty(&thread_current()->sup_pagetable));
 
   /* Remove thread from all threads list, set our status to dying,
      and schedule another process.  That process will destroy us

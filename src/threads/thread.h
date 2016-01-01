@@ -2,6 +2,7 @@
 #define THREADS_THREAD_H
 
 #include <debug.h>
+#include <hash.h>
 #include <list.h>
 #include <stdint.h>
 #include "userprog/process.h"
@@ -97,6 +98,10 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
+#endif
+
+#ifdef VM
+    struct hash sup_pagetable;
 #endif
 
     // process id which this thread belongs to

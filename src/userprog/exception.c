@@ -153,6 +153,21 @@ page_fault (struct intr_frame *f)
   // handle user page faults by killing the process
   if (user)
   {
+    if (not_present) {
+        // check if access is valid anyway and map page if so
+        if (!spage_valid_and_load(fault_addr)) {
+            // access to invalid address
+            log_debug ("Handled page fault:\n");
+            log_debug ("Page fault at %p: %s error %s page in %s context.\n",
+                       fault_addr,
+                       not_present ? "not present" : "rights violation",
+                       write ? "writing" : "reading",
+                       user ? "user" : "kernel");
+            process_exit_with_value(-1);
+            NOT_REACHED();
+        }
+        return;
+    }
     process_exit_with_value(-1);
     NOT_REACHED();
   }
