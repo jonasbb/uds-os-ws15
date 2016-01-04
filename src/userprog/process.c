@@ -599,7 +599,7 @@ process_exit_with_value (int exit_value)
   lock_release(&pid_lock);
 
   // cleanup additional entries
-  spage_destroy(&cur->sup_pagetable);
+  spage_destroy();
   
   thread_exit();
 }
@@ -919,7 +919,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 
     bool res;
     if (read_bytes > 0) {
-      res = spage_map_file(file, ofs, upage, writable, page_read_bytes);
+      res = spage_map_segment(file, ofs, upage, writable, page_read_bytes);
     } else {
       res = spage_map_zero(upage, writable);
     }

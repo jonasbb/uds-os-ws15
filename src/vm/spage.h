@@ -13,12 +13,11 @@ enum spte_backing {
 };
 typedef uint8_t spte_backing;
 
-enum spte_perm {
-    FLG_R = 1 << 0,
-    FLG_W = 1 << 1,
-    FLG_X = 1 << 2
+enum spte_flags {
+    SPTE_W    = 1 << 0,
+    SPTE_MMAP = 1 << 7
 };
-typedef uint8_t spte_perm;
+typedef uint8_t spte_flags;
 
 typedef struct spage_table_entry {
     // hashable entry
@@ -28,7 +27,7 @@ typedef struct spage_table_entry {
     // </hash>
 
     spte_backing backing;
-    spte_perm perm;
+    spte_flags flags;
     union {
         /* swapped */
         struct {
@@ -51,17 +50,24 @@ typedef struct spage_table_entry {
 
 unsigned spte_hash(const struct hash_elem *e,
                    void                   *aux);
-
 bool spte_less(const struct hash_elem *a,
                const struct hash_elem *b,
                void                   *aux);
+void spte_destroy(struct hash_elem *e,
+                  void             *aux);
 
+void spage_destroy(void);
 bool spage_valid_and_load(void *vaddr);
-bool spage_map_file(struct file *f,
-                    size_t ofs,
-                    void *uaddr,
-                    const bool writable,
-                    size_t size);
+bool spage_map_mmap(struct file *f,
+                    size_t       ofs,
+                    void        *uaddr,
+                    const bool   writeable,
+                    size_t       size);
+bool spage_map_segment(struct file *f,
+                       size_t       ofs,
+                       void        *uaddr,
+                       const bool   writeable,
+                       size_t       size);
 bool spage_map_zero(void *uaddr,
-                    const bool writable);
+                    const bool writeable);
 #endif
