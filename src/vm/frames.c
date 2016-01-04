@@ -138,7 +138,7 @@ frame_get_free() {
                 frametable.frametable[frametable.search_ptr].pte = (void*) 0xFFFFFFFF;
                 frametable.used++;
                 void* tmp = pagenum_to_page(frametable.search_ptr);
-                log_debug("### Free page at 0x%08x ###\n", tmp);
+                log_debug("### Free page at 0x%08x ###\n", (uint32_t) tmp);
                 return tmp;
             }
             // jump to next position
