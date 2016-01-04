@@ -122,6 +122,31 @@ pagedir_set_page (uint32_t *pd, void *upage, void *kpage, bool writable)
     return false;
 }
 
+/*
+ * Creates a mapping allowing the user to access page `upage`.
+ * Page is not actively mapped and accesses will trigger a page fault.
+ */
+bool
+pagedir_set_page_not_present(uint32_t *pd,
+                             void     *upage) {
+  uint32_t *pte;
+
+  ASSERT (pg_ofs (upage) == 0);
+  ASSERT (is_user_vaddr (upage));
+  ASSERT (pd != init_page_dir);
+
+  pte = lookup_page (pd, upage, true);
+
+  if (pte != NULL)
+    {
+      ASSERT ((*pte & PTE_P) == 0);
+      *pte = pte_create_user_not_present ();
+      return true;
+    }
+  else
+    return false;
+}
+
 /* Looks up the physical address that corresponds to user virtual
    address UADDR in PD.  Returns the kernel virtual address
    corresponding to that physical address, or a null pointer if
@@ -158,6 +183,30 @@ pagedir_clear_page (uint32_t *pd, void *upage)
       // TODO update frame table
       frame_remove(pte_get_page(pte));
       *pte &= ~PTE_P;
+      invalidate_pagedir (pd);
+    }
+}
+
+/* Returns true if the PTE for virtual page VPAGE in PD is present,
+   that is, if the page is not mapped, only the PTE is present.
+   Returns false if PD contains no PTE for VPAGE. */
+bool
+pagedir_is_present (uint32_t *pd, const void *vpage)
+{
+  uint32_t *pte = lookup_page (pd, vpage, false);
+  return pte != NULL && (*pte & PTE_P) != 0;
+}
+
+/* Remove the present bit in the PTE for virtual page VPAGE
+ * in PD
+ */
+void
+pagedir_set_not_present (uint32_t *pd, const void *vpage)
+{
+  uint32_t *pte = lookup_page (pd, vpage, false);
+  if (pte != NULL)
+    {
+      *pte &= ~(uint32_t) PTE_P;
       invalidate_pagedir (pd);
     }
 }

@@ -111,6 +111,13 @@ static inline uint32_t pte_create_user (void *page, bool writable) {
   return pte_create_kernel (page, writable) | PTE_U;
 }
 
+/* Returns a PTE that points to PAGE.
+   The PTE's page is marked as not present.
+   The page will be usable by both user and kernel code. */
+static inline uint32_t pte_create_user_not_present (void) {
+  return PTE_U;
+}
+
 /* Returns a pointer to the page that page table entry PTE points
    to. */
 static inline void *pte_get_page (uint32_t pte) {

@@ -8,6 +8,7 @@
 #include "vm/frames.h"
 
 static bool install_page (void *upage, void *kpage, bool writable);
+static bool install_not_present_page (void *upage);
 
 unsigned
 spte_hash(const struct hash_elem  *e,
@@ -156,7 +157,8 @@ spage_map_file(struct file *f,
 
     // insert w/o replace
     // NULL if insert successful
-    return hash_insert(&thread_current()->sup_pagetable, &e->elem) == NULL;
+    return install_not_present_page(uaddr)
+                 && hash_insert(&thread_current()->sup_pagetable, &e->elem) == NULL;
 }
 
 bool
@@ -171,7 +173,8 @@ spage_map_zero(void *uaddr,
 
     // insert w/o replace
     // NULL if insert successful
-    return hash_insert(&thread_current()->sup_pagetable, &e->elem) == NULL;
+    return install_not_present_page(uaddr)
+                 && hash_insert(&thread_current()->sup_pagetable, &e->elem) == NULL;
 }
 
 /* Adds a mapping from user virtual address UPAGE to kernel
@@ -192,4 +195,14 @@ install_page (void *upage, void *kpage, bool writable)
      address, then map our page there. */
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
+}
+
+static bool
+install_not_present_page (void *upage) {
+  struct thread *t = thread_current ();
+
+  /* Verify that there's not already a page at that virtual
+     address, then map our page there. */
+  return (pagedir_get_page (t->pagedir, upage) == NULL
+          && pagedir_set_page_not_present (t->pagedir, upage));
 }
