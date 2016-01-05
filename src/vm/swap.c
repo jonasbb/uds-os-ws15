@@ -33,10 +33,12 @@ block_sector_t
 swap_get_next_free() {
     lock_acquire(swap_lock);
     int bitmap_size = bitmap_size(swap_map);
-    //TODO check if swap is full
+    if (bitmap_all(swap_map, 0, bitmap_size)) {
+        // TODO: handle SWAP full!
+    }
     block_sector_t next_free_swap = bitmap_scan(swap_map, 0, 1, false);
     if (next_free_swap != BITMAP_ERROR) {
-        bitmap_set_multiple(swap_map, next_free_swap, 1, true);
+        bitmap_set(swap_map, next_free_swap, true);
     }
     lock_release(swap_lock);
     return next_free_swap;
@@ -59,7 +61,7 @@ swap_add(struct swaptable_entry * st_e) {
 void
 swap_remove(struct swaptable_entry * st_e) {
     lock_acquire(swap_lock);
-    bitmap_set_multiple(swap_map, st_e -> swap_sector, 1, false);
+    bitmap_set(swap_map, st_e -> swap_sector, false);
     lock_release(swap_lock);
 }
 
@@ -68,7 +70,7 @@ void
 swap_read(struct swaptable_entry * st_e, void *addr) {
     lock_acquire(swap_lock);  
     read_page_from_block(st_e, addr);
-    bitmap_set_multiple(swap_map, st_e -> swap_sector, 1, false);
+    bitmap_set(swap_map, st_e -> swap_sector, false);
     lock_release(swap_lock);
 }
 
