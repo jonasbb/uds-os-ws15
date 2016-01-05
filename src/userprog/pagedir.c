@@ -99,6 +99,12 @@ lookup_page (uint32_t *pd, const void *vaddr, bool create)
 bool
 pagedir_set_page (uint32_t *pd, void *upage, void *kpage, bool writable)
 {
+  return pagedir_set_page_pin(pd, upage, kpage, writable, false);
+}
+   
+bool
+pagedir_set_page_pin (uint32_t *pd, void *upage, void *kpage, bool writable, bool pin)
+{
   uint32_t *pte;
 
   ASSERT (pg_ofs (upage) == 0);
@@ -112,6 +118,7 @@ pagedir_set_page (uint32_t *pd, void *upage, void *kpage, bool writable)
   if (pte != NULL) 
     {
       ASSERT ((*pte & PTE_P) == 0);
+      frame_set_pin(kpage,pin);
       *pte = pte_create_user (kpage, writable);
 
       // TODO update frame table

@@ -8,7 +8,7 @@
 #include "vm/frames.h"
 #include "vm/swap.h"
 
-static bool install_page (void *upage, void *kpage, bool writable);
+static bool install_page (void *upage, void *kpage, bool writable, bool pin);
 static bool install_not_present_page (void *upage);
 static bool spage_map_file(struct file *f,
                            size_t       ofs,
@@ -84,7 +84,7 @@ spage_destroy() {
 }
 
 bool
-spage_valid_and_load(void *vaddr) {
+spage_valid_and_load(void *vaddr, bool pin) {
     log_debug("@@@ spage_valid_and_load called (tid: %d, vaddr 0x%08x) @@@\n",
               thread_current()->tid, (uint32_t) vaddr);
     bool success = true;
@@ -138,7 +138,7 @@ spage_valid_and_load(void *vaddr) {
         NOT_REACHED();
     }
 
-  if (!install_page(e->vaddr, p, e->flags & SPTE_W)) {
+  if (!install_page(e->vaddr, p, e->flags & SPTE_W, pin)) {
     success = false;
     frame_remove(p);
   } 
@@ -256,14 +256,14 @@ spage_map_zero(void *uaddr,
    Returns true on success, false if UPAGE is already mapped or
    if memory allocation fails. */
 static bool
-install_page (void *upage, void *kpage, bool writeable)
+install_page (void *upage, void *kpage, bool writeable, bool pin)
 {
   struct thread *t = thread_current ();
 
   /* Verify that there's not already a page at that virtual
      address, then map our page there. */
   return (pagedir_get_page (t->pagedir, upage) == NULL
-          && pagedir_set_page (t->pagedir, upage, kpage, writeable));
+          && pagedir_set_page_pin (t->pagedir, upage, kpage, writeable, pin));
 }
 
 static bool

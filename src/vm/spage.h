@@ -54,7 +54,7 @@ void spte_destroy(struct hash_elem *e,
                   void             *aux);
 
 void spage_destroy(void);
-bool spage_valid_and_load(void *vaddr);
+bool spage_valid_and_load(void *vaddr, bool pin);
 bool spage_map_mmap(struct file *f,
                     size_t       ofs,
                     void        *uaddr,

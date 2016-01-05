@@ -226,7 +226,6 @@ validate_user_buffer (void* user_buf, unsigned size)
   // validate original pointer
   uaddr_to_kaddr(user_buf);
   void* user = user_buf;
-  
   // bytes remaining in page
   unsigned remaining_bytes = PGSIZE - pg_ofs(user);
   if (remaining_bytes < size)
@@ -248,7 +247,6 @@ validate_user_buffer (void* user_buf, unsigned size)
     // move pointer to next page
     size -= PGSIZE;
     user += PGSIZE;
-    
     // validate pointer
     uaddr_to_kaddr(user_buf);
   }
@@ -263,7 +261,7 @@ syscall_handler (struct intr_frame *f)
   int status, pid, fd;
 
   uint32_t syscall_nr = *((uint32_t*) uaddr_to_kaddr(f->esp));
-  
+  printf("SysCall_NR.: %i\n" ,syscall_nr);
   switch (syscall_nr) {
     case SYS_HALT:
                    syscall_halt();
@@ -310,8 +308,11 @@ syscall_handler (struct intr_frame *f)
                    buffer_user = *((void**)uaddr_to_kaddr(f->esp+8)); /* void* in user mode */
                    size = *((unsigned *)uaddr_to_kaddr(f->esp+12));
                    validate_user_buffer(buffer_user, size); /* validates user input */
+                   printf("4\n");
                    buffer_kernel = uaddr_to_kaddr(buffer_user); /* void* in kernel mode */
+                   printf("5\n");
                    f->eax = syscall_read(fd, buffer_kernel, size);
+                   
                    break;    /* Read from a file. */
     case SYS_WRITE:
                    fd = *((int*) uaddr_to_kaddr(f->esp+4));
@@ -343,17 +344,27 @@ syscall_handler (struct intr_frame *f)
 static void* 
 uaddr_to_kaddr (const void* uaddr) {
   // check for null pointers
+
   if (!uaddr) {
       syscall_exit(-1); /* address violation */
       NOT_REACHED ();
   }
-  
+  // TODO Lock needed?
   if (is_user_vaddr(uaddr)){
-    void* page = pagedir_get_page(thread_current()->pagedir, uaddr);
-    if (page) {
-      return page;
-    } 
+    if (pagedir_is_assigned(thread_current()->pagedir, uaddr)) {
+      void* page = pagedir_get_page(thread_current()->pagedir, uaddr);
+      if (page) {
+        frame_set_pin(page, true);
+        return page;
+      }
+      else {
+        if (spage_valid_and_load(uaddr, true)) {
+          return pagedir_get_page(thread_current()->pagedir, uaddr); 
+       }
+    }   
+    }
     else {
+       
       syscall_exit(-1); /* address violation */
       NOT_REACHED ();
     }
@@ -363,4 +374,3 @@ uaddr_to_kaddr (const void* uaddr) {
     NOT_REACHED ();
   }
 }
-

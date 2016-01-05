@@ -157,7 +157,7 @@ page_fault (struct intr_frame *f)
   {
     if (not_present) {
         // check if access is valid anyway and map page if so
-        bool tmp = spage_valid_and_load(pg_round_down(fault_addr));
+        bool tmp = spage_valid_and_load(pg_round_down(fault_addr), false);
         if (!tmp) {
             // access to invalid address
             log_debug ("Handled page fault:\n");
