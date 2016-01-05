@@ -186,6 +186,15 @@ pagedir_clear_page (uint32_t *pd, void *upage)
       invalidate_pagedir (pd);
     }
 }
+/* Returns true if the PTE for virtual page VPAGE in PD is assigned,
+   that is the address is a valid address
+   Returns false if PD contains no PTE for VPAGE. */
+bool
+pagedir_is_assigned (uint32_t *pd, const void *vpage)
+{
+  uint32_t *pte = lookup_page (pd, vpage, false);
+  return pte != NULL && (*pte & PTE_ASSIGNED) != 0;
+}
 
 /* Returns true if the PTE for virtual page VPAGE in PD is present,
    that is, if the page is not mapped, only the PTE is present.
