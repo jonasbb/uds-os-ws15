@@ -62,6 +62,7 @@ static inline uintptr_t pd_no (const void *va) {
 #define PTE_FLAGS 0x00000fff    /* Flag bits. */
 #define PTE_ADDR  0xfffff000    /* Address bits. */
 #define PTE_AVL   0x00000e00    /* Bits available for OS use. */
+#define PTE_ASSIGNED 0x200      /* Address is assigned to user process */
 #define PTE_P 0x1               /* 1=present, 0=not present. */
 #define PTE_W 0x2               /* 1=read/write, 0=read-only. */
 #define PTE_U 0x4               /* 1=user/kernel, 0=kernel only. */
@@ -84,7 +85,7 @@ struct pagetable_entry {
 /* Returns a PDE that points to page table PT. */
 static inline uint32_t pde_create (uint32_t *pt) {
   ASSERT (pg_ofs (pt) == 0);
-  return vtop (pt) | PTE_U | PTE_P | PTE_W;
+  return vtop (pt) | PTE_U | PTE_P | PTE_ASSIGNED | PTE_W;
 }
 
 /* Returns a pointer to the page table that page directory entry
@@ -100,7 +101,7 @@ static inline uint32_t *pde_get_pt (uint32_t pde) {
    The page will be usable only by ring 0 code (the kernel). */
 static inline uint32_t pte_create_kernel (void *page, bool writable) {
   ASSERT (pg_ofs (page) == 0);
-  return vtop (page) | PTE_P | (writable ? PTE_W : 0);
+  return vtop (page) | PTE_P | PTE_ASSIGNED | (writable ? PTE_W : 0);
 }
 
 /* Returns a PTE that points to PAGE.
@@ -115,7 +116,7 @@ static inline uint32_t pte_create_user (void *page, bool writable) {
    The PTE's page is marked as not present.
    The page will be usable by both user and kernel code. */
 static inline uint32_t pte_create_user_not_present (void) {
-  return PTE_U;
+  return PTE_ASSIGNED | PTE_U;
 }
 
 /* Returns a pointer to the page that page table entry PTE points
