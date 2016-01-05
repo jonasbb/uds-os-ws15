@@ -6,6 +6,7 @@
 #include "threads/malloc.h"
 #include "threads/thread.h"
 #include "vm/frames.h"
+#include "vm/swap.h"
 
 static bool install_page (void *upage, void *kpage, bool writable);
 static bool install_not_present_page (void *upage);
@@ -99,22 +100,25 @@ spage_valid_and_load(void *vaddr) {
     }
 
     e = hash_entry(elem, struct spage_table_entry, elem);
+    if (!(e->flags & SPTE_IS_VALID)) {
+      PANIC("Memory handling wrong!");
+    }
+    p = frame_get_free();
+    
+    if (p == NULL) {
+            success = false;
+            goto done;
+    }
+    
     switch(e->backing) {
     case SWAPPED:
-        // TODO implement
-        success = false;
-        goto done;
+
+        swap_read(e->st_e, p);
+        e->flags &= ~SPTE_IS_VALID; 
         break;
 
     case FROMFILE:
-        p = frame_get_free();
-        if (p == NULL ||
-            !install_page(e->vaddr,
-                          p,
-                          e->flags & SPTE_W)) {
-            success = false;
-            goto done;
-        }
+        
         // page may not be fully written to
         memset(p, 0, PGSIZE);
 
@@ -122,24 +126,21 @@ spage_valid_and_load(void *vaddr) {
         size_t bread = file_read_at(e->file, p, e->file_size, e->file_ofs);
         success = bread == e->file_size;
 
-        goto done;
         break;
 
     case ZEROPAGE:;
-        p = frame_get_free();
-        if (p == NULL ||
-            !install_page(e->vaddr,
-                          p,
-                          e->flags & SPTE_W)) {
-            success = false;
-            goto done;
-        }
+
         memset(p, 0, PGSIZE);
         break;
 
     default:
         NOT_REACHED();
     }
+
+  if (!install_page(e->vaddr, p, e->flags & SPTE_W)) {
+    success = false;
+    frame_remove(p);
+  } 
 
 done:
     log_debug("@@@ spage_valid_and_load return: %s @@@\n",
@@ -163,7 +164,7 @@ spage_map_file(struct file *f,
     e->file = f;
     e->file_ofs = ofs;
     e->file_size = size;
-    e->flags = 0;
+    e->flags = SPTE_IS_VALID;
     if(writeable) {
         e->flags |= SPTE_W;
     }
@@ -233,7 +234,7 @@ spage_map_zero(void *uaddr,
     struct spage_table_entry *e = malloc(sizeof (*e));
     e->vaddr = uaddr;
     e->backing = ZEROPAGE;
-    e->flags = 0;
+    e->flags = SPTE_IS_VALID;
     if(writeable) {
         e->flags |= SPTE_W;
     }

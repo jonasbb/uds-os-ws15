@@ -6,6 +6,7 @@
 #include "devices/block.h"
 #include "filesys/file.h"
 
+
 enum spte_backing {
     SWAPPED  = 0,
     FROMFILE = 1,
@@ -15,7 +16,8 @@ typedef uint8_t spte_backing;
 
 enum spte_flags {
     SPTE_W    = 1 << 0,
-    SPTE_MMAP = 1 << 7
+    SPTE_MMAP = 1 << 7,
+    SPTE_IS_VALID = 1 << 2
 };
 typedef uint8_t spte_flags;
 
@@ -30,12 +32,7 @@ typedef struct spage_table_entry {
     spte_flags flags;
     union {
         /* swapped */
-        struct {
-            // which block device is used for swapping
-            struct block *swap_dev;
-            // offset within the device to locate the page
-            size_t swap_ofs;
-        };
+        struct swaptable_entry *st_e;
         /* file */
         struct {
             // file as backing store
