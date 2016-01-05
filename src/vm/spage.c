@@ -75,6 +75,7 @@ spage_destroy() {
       default:
         NOT_REACHED();
       }
+      e_ = hash_next(&iter);
     }
     // TODO MUST be _destroy to avoid memory leak
     // clear so that we can still check for leftover entries
