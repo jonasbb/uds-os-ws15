@@ -1,5 +1,5 @@
-#import "vm/swap.h"
-#import "lib/kernel/bitmap.h"
+#include "vm/swap.h"
+#include "lib/kernel/bitmap.h"
 
 struct block swap_block;
 int swap_block_size;
