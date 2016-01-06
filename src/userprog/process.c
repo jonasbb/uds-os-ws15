@@ -316,7 +316,8 @@ delete_mmaplist(pid_t pid, mapid_t mapid)
       struct mmaplist_item *e_ = list_entry (e, struct mmaplist_item, elem);
       if (e_->data.mapid == mapid) {
         list_remove(e);
-        for(size_t i = 0; i < e_->data.pgcount; i++) {
+        size_t i;
+        for(i = 0; i < e_->data.pgcount; i++) {
             spage_map_munmap(e_->data.base_addr + i * PGSIZE);
         }
         file_close(e_->data.file);

@@ -209,7 +209,8 @@ syscall_mmap (int fd, void *vaddr) {
   size_t pgcount = DIV_ROUND_UP(fsize, PGSIZE);
 
   // check memory range for overlaps with already existing mappings
-  for(size_t i = 0; i < pgcount; i++) {
+  size_t i, s;
+  for(i = 0; i < pgcount; i++) {
     if (pagedir_is_assigned(thread_current()->pagedir, vaddr + i * PGSIZE))
       return -1;
   }
@@ -219,7 +220,7 @@ syscall_mmap (int fd, void *vaddr) {
     return -1;
   pid_t pid = thread_current()->pid;
   mapid_t mapid = insert_mmaplist(pid, vaddr, f_);
-  for(size_t i = 0, s = fsize; i < pgcount; i++, s -= PGSIZE) {
+  for(i = 0, s = fsize; i < pgcount; i++, s -= PGSIZE) {
     if (spage_map_mmap(f_,
                        i * PGSIZE,
                        vaddr + i * PGSIZE,
