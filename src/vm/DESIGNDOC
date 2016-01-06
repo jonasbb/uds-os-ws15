@@ -34,6 +34,14 @@ Software reverse engineering lecture WS14/15
 
 >> A2: In a few paragraphs, describe your code for locating the frame,
 >> if any, that contains the data of a given page.
+A given page must consist out of a thread id and a virtual address
+in the threads address space.
+All struct thread's are located in a single large list. We added an
+access method for this list by a given thread id. The struct thread
+has the pointer for the page directory stored. The page directory
+and the virtual address can be given to lookup_page() in pagedir.c
+to get a kernel virtual address which is equivalent to any frame
+in all our cases (expect the physical addresses in the PTEs).
 
 >> A3: How does your code coordinate accessed and dirty bits between
 >> kernel and user virtual addresses that alias a single frame, or
