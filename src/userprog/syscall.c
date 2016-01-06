@@ -465,7 +465,7 @@ uaddr_to_kaddr_write (const void* uaddr, bool write) {
         return uaddr;
       }
       else {
-        if (spage_valid_and_load(uaddr, true)) {
+        if (spage_valid_and_load(pg_round_down(uaddr), true)) {
           return pagedir_get_page(thread_current()->pagedir, uaddr); 
        }
       }   
