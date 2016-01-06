@@ -132,7 +132,7 @@ syscall_read (int fd, void *buffer, unsigned size) {
       return -1;
 
     int res = file_read(f, buffer, size);
-
+    
     return res;
   }
 }
@@ -276,11 +276,11 @@ validate_user_string (char* user_str, void *esp)
  * The length of the buffer.
  */
 static void
-validate_user_buffer (void* user_buf, int size, void *esp)
+validate_user_buffer_write (void* user_buf, int size, void *esp, bool write)
 {
   ASSERT(size >= 0);
   // validate original pointer
-  uaddr_to_kaddr(user_buf, esp);
+  uaddr_to_kaddr_write(user_buf,write , esp);
   void* user = user_buf;
   // bytes remaining in page
   int remaining_bytes = PGSIZE - pg_ofs(user);
@@ -300,11 +300,17 @@ validate_user_buffer (void* user_buf, int size, void *esp)
   // a new page which we have to check also
   do {
     // validate pointer, esp
-    uaddr_to_kaddr(user, esp);
+    uaddr_to_kaddr_write(user,write, esp);
     // move pointer to next page
     size -= PGSIZE;
     user += PGSIZE;
   } while (size > 0);
+}
+
+static void
+validate_user_buffer (void* user_buf, int size, void *esp)
+{
+  validate_user_buffer_write(user_buf, size, esp, false);
 }
 
 static void
@@ -381,11 +387,11 @@ syscall_handler (struct intr_frame *f)
     case SYS_READ:
                    log_debug("SYS_READ\n");
                    fd = *((int*) uaddr_to_kaddr(f->esp+4, esp));
-                   buffer_user = *((void**)uaddr_to_kaddr_write(f->esp+8,true, esp)); /* void* in user mode */
+                   buffer_user = *((void**)uaddr_to_kaddr(f->esp+8 ,esp)); /* void* in user mode */
                    size = *((unsigned *)uaddr_to_kaddr(f->esp+12, esp));
-                   validate_user_buffer(buffer_user, size, esp); /* validates user input */
+                   validate_user_buffer_write(buffer_user, size, esp, true); /* validates user input */                        
                    f->eax = syscall_read(fd, buffer_user, size);
-                   // TODO unpinning
+                   // unpinning
                    unpin_page(f->esp+4);
                    unpin_page(f->esp+8);
                    unpin_page(f->esp+12);
