@@ -52,6 +52,7 @@ spte_destroy(struct hash_elem *e,
 
 void
 spage_destroy() {
+    lock_acquire_re(&vm_lock);
     // TODO cleanup everything
     // especially free space on swap device
     // write to files if writeable
@@ -88,10 +89,12 @@ spage_destroy() {
     // clear so that we can still check for leftover entries
     hash_destroy(&t->sup_pagetable, &spte_destroy);
     memset(&t->sup_pagetable, 0, sizeof(t->sup_pagetable));
+    lock_release_re(&vm_lock);
 }
 
 bool
 spage_valid_and_load(void *vaddr, bool pin, void *esp) {
+    lock_acquire_re(&vm_lock);
     // may be called from a kernel thread or a user thread in
     // kernel mode the esp is already set
     // if this is a user process the esp is saved in the
@@ -101,8 +104,10 @@ spage_valid_and_load(void *vaddr, bool pin, void *esp) {
     }
     struct thread *t = thread_current();
     // fast exit is page is already loaded
-    if (pagedir_is_present(t->pagedir, pg_round_down(vaddr)))
+    if (pagedir_is_present(t->pagedir, pg_round_down(vaddr))) {
+        lock_release_re(&vm_lock);
         return true;
+    }
     log_debug("@@@ spage_valid_and_load called (tid: %d, vaddr 0x%08x, esp: 0x%08x) @@@\n",
               thread_current()->tid, (uint32_t) vaddr, esp);
     bool success = true;
@@ -190,6 +195,7 @@ spage_valid_and_load(void *vaddr, bool pin, void *esp) {
 
 
 done:
+    lock_release_re(&vm_lock);
     log_debug("@@@ spage_valid_and_load return: %s @@@\n",
               success ? "success" : "!!PROBLEM!!");
     return success;
@@ -202,6 +208,7 @@ spage_map_file(struct file *f,
                const bool   writeable,
                size_t       size,
                bool         is_mmap) {
+    lock_acquire_re(&vm_lock);
     ASSERT(pg_ofs(uaddr) == 0);
     ASSERT(size <= PGSIZE);
 
@@ -221,8 +228,10 @@ spage_map_file(struct file *f,
 
     // insert w/o replace
     // NULL if insert successful
-    return install_not_present_page(uaddr)
+    bool tmp = install_not_present_page(uaddr)
                  && hash_insert(&thread_current()->sup_pagetable, &e->elem) == NULL;
+    lock_release_re(&vm_lock);
+    return tmp;
 }
 
 /* Maps up to a single page (PGSIZE bytes) of file `f` starting at position
@@ -251,6 +260,7 @@ spage_map_mmap(struct file *f,
  */
 void
 spage_map_munmap(void *uaddr) {
+    lock_acquire_re(&vm_lock);
     struct spage_table_entry ecmp, *e;
     struct hash_elem *e_;
     ecmp.vaddr = uaddr;
@@ -258,6 +268,7 @@ spage_map_munmap(void *uaddr) {
     // now we can delete the backing entry
     e_ = hash_delete(&thread_current()->sup_pagetable, &ecmp.elem);
     if (!e_) {
+        lock_release_re(&vm_lock);
         return;
     }
     e = hash_entry(e_, struct spage_table_entry, elem);
@@ -282,11 +293,13 @@ spage_map_munmap(void *uaddr) {
     // remove from address space
     pagedir_clear_page(thread_current()->pagedir, e->vaddr);
     free(e);
+    lock_release_re(&vm_lock);
 }
 
 void
 spage_flush_mmap(struct spage_table_entry *e,
                  void                     *kaddr){
+    lock_acquire_re(&vm_lock);
     ASSERT(e->backing == FROMFILE);
     ASSERT((e->flags & SPTE_MMAP) != 0);
     ASSERT(is_kernel_vaddr(kaddr));
@@ -295,6 +308,7 @@ spage_flush_mmap(struct spage_table_entry *e,
                   kaddr,
                   e->file_size,
                   e->file_ofs);
+    lock_release_re(&vm_lock);
 }
 
 /* Maps up to a single page (PGSIZE bytes) of file `f` starting at position
@@ -326,6 +340,7 @@ spage_map_segment(struct file *f,
 bool
 spage_map_zero(void *uaddr,
                const bool writeable) {
+    lock_acquire_re(&vm_lock);
     ASSERT(pg_ofs(uaddr) == 0);
 
     struct spage_table_entry *e = malloc(sizeof (*e));
@@ -338,8 +353,10 @@ spage_map_zero(void *uaddr,
 
     // insert w/o replace
     // NULL if insert successful
-    return install_not_present_page(uaddr)
+    bool tmp = install_not_present_page(uaddr)
                  && hash_insert(&thread_current()->sup_pagetable, &e->elem) == NULL;
+    lock_release_re(&vm_lock);
+    return tmp;
 }
 
 /* Adds a mapping from user virtual address UPAGE to kernel
@@ -354,22 +371,28 @@ spage_map_zero(void *uaddr,
 bool
 install_page (void *upage, void *kpage, bool writeable, bool pin)
 {
+  lock_acquire_re(&vm_lock);
   struct thread *t = thread_current ();
 
   /* Verify that there's not already a page at that virtual
      address, then map our page there. */
-  return (pagedir_get_page (t->pagedir, upage) == NULL
+  bool tmp = (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page_pin (t->pagedir, upage, kpage, writeable, pin));
+  lock_release_re(&vm_lock);
+  return tmp;
 }
 
 static bool
 install_not_present_page (void *upage) {
+  lock_acquire_re(&vm_lock);
   struct thread *t = thread_current ();
 
   /* Verify that there's not already a page at that virtual
      address, then map our page there. */
-  return (pagedir_get_page (t->pagedir, upage) == NULL
+  bool tmp = (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page_not_present (t->pagedir, upage));
+  lock_release_re(&vm_lock);
+  return tmp;          
 }
 
 static bool
@@ -385,6 +408,7 @@ is_valid_stack_address(void * addr, void * esp) {
 bool
 spage_map_swap(void *uaddr,
                struct swaptable_entry * st_e, struct thread * t) {
+    lock_acquire_re(&vm_lock);
     ASSERT(pg_ofs(uaddr) == 0);
 
     struct spage_table_entry *e = malloc(sizeof (*e));
@@ -396,5 +420,7 @@ spage_map_swap(void *uaddr,
 
     // insert w/o replace
     // NULL if insert successful
-    return hash_insert(&t->sup_pagetable, &e->elem) == NULL;
+    bool tmp = hash_insert(&t->sup_pagetable, &e->elem) == NULL;
+    lock_release_re(&vm_lock);
+    return tmp;
 }

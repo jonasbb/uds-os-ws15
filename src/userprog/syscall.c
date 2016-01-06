@@ -457,7 +457,7 @@ uaddr_to_kaddr (const void* uaddr, void *esp) {
 static void*
 uaddr_to_kaddr_write (const void* uaddr, bool write, void *esp) {
   // check for null pointers
-
+  lock_acquire_re(&vm_lock);
   if (!uaddr) {
       goto error;
   }
@@ -474,6 +474,7 @@ uaddr_to_kaddr_write (const void* uaddr, bool write, void *esp) {
       void* page = pagedir_get_page(thread_current()->pagedir, uaddr);
       if (page) {
         frame_set_pin(pg_round_down(page), true);
+        lock_release_re(&vm_lock);
         return uaddr;
       }
       else {
@@ -489,6 +490,7 @@ uaddr_to_kaddr_write (const void* uaddr, bool write, void *esp) {
   }
 
 error:
+    lock_release_re(&vm_lock);
     syscall_exit(-1); /* address violation */
     NOT_REACHED ();
 }

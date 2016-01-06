@@ -34,7 +34,6 @@ struct frametable {
     // used for page number calculations
     void* base_addr;
     
-    struct lock frametable_lock;
 };
 
 struct frametable frametable;
@@ -54,7 +53,7 @@ frame_init(uint32_t size,
     frametable.evict_ptr = 0;
     frametable.search_ptr = 0;
     frametable.base_addr = frame_base_addr;
-    lock_init(&frametable.frametable_lock);
+    lock_init(&vm_lock);
 
     // create frame table with size of number of pages
     frametable.frametable = frame_base_addr;
@@ -83,7 +82,7 @@ frame_insert(void *frame_address,
              tid_t tid,
              void *virt_address,
              struct pagetable_entry* pte) {
-    lock_acquire(&frametable.frametable_lock);
+    lock_acquire_re(&vm_lock);
     // frames MUST always be page aligned
     ASSERT(frame_address != NULL);
     ASSERT(pg_ofs(frame_address) == 0);
@@ -97,7 +96,7 @@ frame_insert(void *frame_address,
                             tid,
                             virt_address,
                             false);
-    lock_release(&frametable.frametable_lock);
+    lock_release_re(&vm_lock);
     return true;
 }
 
@@ -110,7 +109,7 @@ frame_insert(void *frame_address,
  */
 void
 frame_remove(void *frame_address) {
-    lock_acquire(&frametable.frametable_lock);
+    lock_acquire_re(&vm_lock);
     log_debug("--- frame_remove (used: %d, own used: %d) ---\n", frametable.used, frametable.own_used);
     // frames MUST always be page aligned
     ASSERT(frame_address != NULL);
@@ -125,7 +124,7 @@ frame_remove(void *frame_address) {
     // TODO reset everything
     frametable.frametable[pgnum].pte = NULL;
     frametable.used--;
-    lock_release(&frametable.frametable_lock);
+    lock_release_re(&vm_lock);
 }
 
 // remove multiple pages
@@ -144,7 +143,7 @@ frame_remove_mult(void *frame_address,
  */
 void*
 frame_get_free() {
-    lock_acquire(&frametable.frametable_lock);
+    lock_acquire_re(&vm_lock);
     log_debug("+++ frame_get_free (used: %d, own used: %d) +++\n", frametable.used, frametable.own_used);
     // TODO
     if (frametable.used < frametable.size) {
@@ -156,7 +155,7 @@ frame_get_free() {
                 frametable.used++;
                 void* tmp = pagenum_to_page(frametable.search_ptr);
                 log_debug("### Free page at 0x%08x ###\n", (uint32_t) tmp);
-                lock_release(&frametable.frametable_lock);
+                lock_release_re(&vm_lock);
                 return tmp;
             }
             // jump to next position
@@ -171,7 +170,7 @@ frame_get_free() {
         //NOT_REACHED();
         //        && frametable.frametable[frametable.search_ptr].pin == false) {
         void *tmp = frame_evict();
-        lock_release(&frametable.frametable_lock);
+        lock_release_re(&vm_lock);
         return tmp;
     }
     NOT_REACHED();
@@ -180,13 +179,13 @@ frame_get_free() {
 
 void
 frame_set_pin(void *page, bool pin) {
-    lock_acquire(&frametable.frametable_lock);
+    lock_acquire_re(&vm_lock);
     // frames MUST always be page aligned
     ASSERT(page != NULL);
     ASSERT(pg_ofs(page) == 0);
 
     frametable.frametable[page_to_pagenum(page)].pin = pin;
-    lock_release(&frametable.frametable_lock);
+    lock_release_re(&vm_lock);
 }
 
 /*
@@ -231,7 +230,7 @@ frametable_entry_create(struct frametable_entry* fte,
 
 void *
 frame_evict() {
-    ASSERT(lock_held_by_current_thread(&frametable.frametable_lock));
+    ASSERT(lock_held_by_current_thread(&vm_lock));
     uint32_t e_ptr = frametable.evict_ptr;
     while(1) {
             if (frametable.frametable[frametable.evict_ptr].pin == false &&
