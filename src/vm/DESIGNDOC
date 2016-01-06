@@ -93,6 +93,13 @@ the top of the stack.
 >> to be evicted.  How do you ensure that Q cannot access or modify
 >> the page during the eviction process?  How do you avoid a race
 >> between P evicting Q's frame and Q faulting the page back in?
+The page to be evicted is first made inaccessible by removing the present
+bit for this page in Q's page table. Any further accesses of Q will
+result in a page fault. Before the page fault can be handled Q needs
+to aquire the lock still held by P. P has all the time it needs to
+do the work needed to evict the page without Q being able to swap
+anything back in. As soon as P finishes the virtual memory handling
+and releases the lock Q may precede and swap the page back in.
 
 >> B7: Suppose a page fault in process P causes a page to be read from
 >> the file system or swap.  How do you ensure that a second process Q
