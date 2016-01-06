@@ -59,7 +59,7 @@ frame_init(uint32_t size,
     // calculate memory requirements and map them
     frametable.own_used = DIV_ROUND_UP(sizeof(struct frametable_entry) * size, PGSIZE);
     frametable.used = frametable.own_used;
-    uint32_t t;
+    uint32_t i;
     for (i = 0; i < frametable.own_used; i++) {
         frametable_entry_create(&frametable.frametable[i],
                                 (void*) 0xFFFFFFFF, // FIXME not the niced but may not be NULL
