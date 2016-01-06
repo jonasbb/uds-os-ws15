@@ -21,7 +21,7 @@
 #include "vm/frames.h"
 
 static void syscall_handler (struct intr_frame *);
-static void validate_user_string (char* user_str);
+static unsigned validate_user_string (char* user_str);
 static void validate_user_buffer (void* user_buf, unsigned size);
 static void* uaddr_to_kaddr (const void* uaddr);
 static void* uaddr_to_kaddr_write (const void* uaddr, bool write);
@@ -240,9 +240,9 @@ syscall_mmap (int fd, void *vaddr) {
  * inside the user's mapped memory.
  * Terminates the user process on address violations.
  *
- * Takes a char* into userspace to validate.
+ * Takes a char* into userspace to validate. Returns the size of the string.
  */
-static void
+static unsigned
 validate_user_string (char* user_str)
 {
   // validate original pointer
@@ -264,6 +264,8 @@ validate_user_string (char* user_str)
       current_page = pg_no(user);
     }
   }
+  printf("size: %d\n", (user - user_str + 1));
+  return (unsigned) (user - user_str + 1);
 }
 
 /*
@@ -311,7 +313,7 @@ syscall_handler (struct intr_frame *f)
 {
   void *buffer_user, *buffer_kernel;
   char *file_name, *file_name_uaddr, *exec_name, *exec_name_uaddr ;
-  unsigned size, position;
+  unsigned size, position, s_l;
   int status, pid, fd, mapid;
   void *vaddr;
 
@@ -330,10 +332,11 @@ syscall_handler (struct intr_frame *f)
     case SYS_EXEC:
                    log_debug("SYS_EXEC\n");
                    exec_name_uaddr = *((char**) uaddr_to_kaddr(f->esp+4)); /* char pointer in usermode */ 
-                   validate_user_string(exec_name_uaddr);
+                   s_l = validate_user_string(exec_name_uaddr);
                    exec_name = (char*) uaddr_to_kaddr(exec_name_uaddr); /* char pointer in kernel mode */
                    f->eax = syscall_exec(exec_name);
                    unpin_page(f->esp+4);
+                   unpin_buffer(f->esp+4, s_l);
                    break; /* Start another process. */
     case SYS_WAIT:
                    log_debug("SYS_WAIT\n");
@@ -344,28 +347,31 @@ syscall_handler (struct intr_frame *f)
     case SYS_CREATE: 
                    log_debug("SYS_CREATE\n");
                    file_name_uaddr = *((char**) uaddr_to_kaddr(f->esp+4)); /* char pointer in usermode */ 
-                   validate_user_string(file_name_uaddr);
+                   s_l = validate_user_string(file_name_uaddr);
                    file_name = (char*) uaddr_to_kaddr(file_name_uaddr); /* char pointer in kernel mode */
                    size = *((unsigned*) uaddr_to_kaddr(f->esp+8));
                    f->eax = syscall_create(file_name, size);
                    unpin_page(f->esp+4);
                    unpin_page(f->esp+8);
+                   unpin_buffer(f->esp+4, s_l);
                    break;                /* Create a file. */
     case SYS_REMOVE:
                    log_debug("SYS_REMOVE\n");
                    file_name_uaddr = *((char**) uaddr_to_kaddr(f->esp+4)); /* char pointer in usermode */ 
-                   validate_user_string(file_name_uaddr);
+                   s_l = validate_user_string(file_name_uaddr);
                    file_name = (char*) uaddr_to_kaddr(file_name_uaddr); /* char pointer in kernel mode */
                    f->eax = syscall_remove(file_name);
                    unpin_page(f->esp+4);
+                   unpin_buffer(f->esp+4, s_l);
                    break;                 /* Delete a file. */
     case SYS_OPEN:
                    log_debug("SYS_OPEN\n");
                    file_name_uaddr = *((char**) uaddr_to_kaddr(f->esp+4)); /* char pointer in usermode */ 
-                   validate_user_string(file_name_uaddr);
+                   s_l = validate_user_string(file_name_uaddr);
                    file_name = (char*) uaddr_to_kaddr(file_name_uaddr); /* char pointer in kernel mode */
                    f->eax = syscall_open(file_name);
                    unpin_page(f->esp+4);
+                   unpin_buffer(f->esp+4, s_l);
                    break;                  /* Open a file. */
     case SYS_FILESIZE:
                    log_debug("SYS_FILESIZE\n");
@@ -465,7 +471,7 @@ uaddr_to_kaddr_write (const void* uaddr, bool write) {
         return uaddr;
       }
       else {
-        if (spage_valid_and_load(uaddr, true)) {
+        if (spage_valid_and_load(pg_round_down(uaddr), true)) {
           return pagedir_get_page(thread_current()->pagedir, uaddr); 
        }
       }   
@@ -512,29 +518,5 @@ unpin_buffer (void* uaddr, unsigned size) {
     user += PGSIZE;
     // unpin page
     unpin_page(user);
-  }
-}
-
-static void
-unpin_user_string (char* user_str)
-{
-  // validate original pointer
-  char* kernel = uaddr_to_kaddr(user_str);
-  uintptr_t current_page = pg_no(user_str);
-  
-  char* user = user_str;
-  for (;*kernel;)
-  {
-    // move pointers to next char
-    user++;
-    kernel++;
-    
-    // page changed
-    if (pg_no(user) != current_page)
-    {
-      //validate pointer again, because page has changed
-      kernel = uaddr_to_kaddr(user);
-      current_page = pg_no(user);
-    }
   }
 }
