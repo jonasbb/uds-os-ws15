@@ -139,6 +139,27 @@ Afterwards we unpin all frames previously pinned.
 >> C2: Describe how memory mapped files integrate into your virtual
 >> memory subsystem.  Explain how the page fault and eviction
 >> processes differ between swap pages and other pages.
+Our memory subsystem has a hash map for all virtual addresses which
+have another location where the data is stored, the backing store (supplementary page table).
+The backing store can be a file, a zero page or the swap.
+If a page fault occurs for an address where we also have a backing
+location we get all needed information like the file, offset and length
+or the location within the swap which allow us to load the data.
+We can then load the data and map the page as present again in the
+page table for the user process.
+
+The eviction process differs a lot more.
+Any non writable pages will never be written to swap, so we can
+ignore those. All non-writable pages can always be restored from
+the backing file.
+mmaped files will be written to the file. We use the supplementary
+page table to figure out to which part of the file we need to write
+back and then call file_write_at(). We can then reuse the frame.
+For pages which need to be written to the swap device we call a
+method which stores a page onto the device and gives us back an id
+which allows us to get it back. This id is stored to the supplementary
+page table. The writing method for the swap device searches for a
+free space and writes the page in multiple blocks to the device.
 
 >> C3: Explain how you determine whether a new file mapping overlaps
 >> any existing segment.
