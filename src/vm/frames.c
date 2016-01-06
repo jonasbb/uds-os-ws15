@@ -77,6 +77,7 @@ frame_insert(void *frame_address,
              void *virt_address,
              struct pagetable_entry* pte) {
     // frames MUST always be page aligned
+    ASSERT(frame_address != NULL);
     ASSERT(pg_ofs(frame_address) == 0);
     // virtual addresses MUST also be page aligned
     ASSERT(pg_ofs(virt_address) == 0);
@@ -101,7 +102,8 @@ frame_insert(void *frame_address,
 void
 frame_remove(void *frame_address) {
     log_debug("--- frame_remove (used: %d, own used: %d) ---\n", frametable.used, frametable.own_used);
-    // frames must always be page aligned
+    // frames MUST always be page aligned
+    ASSERT(frame_address != NULL);
     ASSERT(pg_ofs(frame_address) == 0);
 
     uint32_t pgnum = page_to_pagenum(frame_address);
@@ -164,6 +166,11 @@ frame_get_free() {
 
 void
 frame_set_pin(void *page, bool pin) {
+    printf("0x%08x\n", page);
+    // frames MUST always be page aligned
+    ASSERT(page != NULL);
+    ASSERT(pg_ofs(page) == 0);
+
     frametable.frametable[page_to_pagenum(page)].pin = pin;
 }
 
@@ -176,7 +183,7 @@ frame_set_pin(void *page, bool pin) {
 static uint32_t
 page_to_pagenum(void *page) {
     // pages are consecutive and nothing can be before the base
-    ASSERT(page > frametable.base_addr);
+    ASSERT(page >= frametable.base_addr);
 
     // remove offset within frame
     page = pg_round_down(page);
