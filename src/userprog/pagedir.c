@@ -181,7 +181,7 @@ pagedir_clear_page (uint32_t *pd, void *upage)
   if (pte != NULL && (*pte & PTE_P) != 0)
     {
       // TODO update frame table
-      frame_remove(pte_get_page(pte));
+      frame_remove(pte_get_page(*pte));
       *pte &= ~(PTE_P | PTE_ASSIGNED);
       invalidate_pagedir (pd);
     }
