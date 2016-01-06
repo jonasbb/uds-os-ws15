@@ -232,33 +232,34 @@ frame_evict() {
                     if (old_pte->writable) {
                         struct spage_table_entry ecmp, *e;
                         struct hash_elem *elem;
-                        ecmp.vaddr = pg_round_down(frametable.frametable[frametable.evict_ptr].virt_address);
+                        ecmp.vaddr = pg_no_to_addr(frametable.frametable[frametable.evict_ptr].virt_address);
                         elem = hash_find(&t->sup_pagetable, &ecmp.elem);
                         if (elem == NULL) {
                             //swap
-                            struct swaptable_entry * st_e = create_swaptable_entry(frametable.frametable[frametable.evict_ptr]);
+                            struct swaptable_entry * st_e = 
+                                    create_swaptable_entry(pagenum_to_page(frametable.evict_ptr));
                             swap_add(st_e);
-                            spage_map_swap(frametable.frametable[frametable.evict_ptr].virt_address, st_e);
-                            
+                            spage_map_swap(pg_no_to_addr(
+                                        frametable.frametable[frametable.evict_ptr].virt_address), st_e, t);
                         }
-                        e = hash_entry(elem, struct spage_table_entry, elem);
+                        else {
+                            e = hash_entry(elem, struct spage_table_entry, elem);
+                            if (e->flags & SPTE_MMAP && old_pte->dirty) {
+                                //flush
+                                spage_flush_mmap(e, pagenum_to_page(frametable.evict_ptr));
+                                //reset dirty bit
+                                pagedir_set_dirty(t->pagedir, e->vaddr, false);
+                            }
+                            else if (!(e->flags & SPTE_MMAP)) {
+                                //file backed writable entry
+                                PANIC("SWAP of page with spage entry!");
+                            
+                            }
+                        }
                         
-                        if (e->flags & SPTE_MMAP && old_pte->dirty) {
-                            //flush
-                            spage_flush_mmap(e, pagenum_to_page(frametable.evict_ptr));
-                            //reset dirty bit
-                            pagedir_set_dirty(t->pagedir, e->vaddr, false);
-                        }
-                        else if (!(e->flags & SPTE_MMAP)) {
-                            //swap
-                            PANIC("SWAP of page with spage entry!");
-                            
-                        }
                     }
-                    
                     pagedir_set_not_present(t->pagedir, 
                                     pg_no_to_addr(frametable.frametable[frametable.evict_ptr].virt_address));
-                    ;
                     frametable.frametable[frametable.evict_ptr].pte = (void*) 0xFFFFFFFF;
                     void* tmp = pagenum_to_page(frametable.evict_ptr);
                     log_debug("### Evict page at 0x%08x ###\n", (uint32_t) tmp);

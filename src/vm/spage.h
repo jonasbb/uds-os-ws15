@@ -5,6 +5,7 @@
 #include <hash.h>
 #include "devices/block.h"
 #include "filesys/file.h"
+#include "threads/thread.h"
 
 #define STACK_MAX ((void *) PHYS_BASE - 512 * PGSIZE) 
 
@@ -73,7 +74,7 @@ bool spage_map_zero(void *uaddr,
                     const bool writeable);
 
 bool spage_map_swap(void *uaddr,
-               struct swaptable_entry * st_e);
+               struct swaptable_entry * st_e, struct thread * t);
 
 bool install_page (void *upage, void *kpage, bool writable, bool pin);
 #endif

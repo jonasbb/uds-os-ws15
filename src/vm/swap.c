@@ -24,9 +24,9 @@ void init_swap() {
 
 // Create new swaptable entry from frametable entry
 struct swaptable_entry* 
-create_swaptable_entry(struct frametable_entry * f) {
+create_swaptable_entry(void * f) {
     struct swaptable_entry* swap_entry = malloc(sizeof(struct swaptable_entry));
-    swap_entry -> frame = f;
+    swap_entry -> frame_kaddr = f;
     return swap_entry;
 } 
 
@@ -78,11 +78,12 @@ swap_read(struct swaptable_entry * st_e, void* addr) {
 
 void
 write_page_to_block(struct swaptable_entry * st_e, int next_free_swap) {
+
     // Iterate over all sectors
     int i;  
     for (i= 0; i < sectors_per_page; i++){
             block_write(swap_block, next_free_swap * sectors_per_page + i,
-                        (void *) pg_no_to_addr(st_e->frame->virt_address) + i * BLOCK_SECTOR_SIZE);
+                        st_e->frame_kaddr + i * BLOCK_SECTOR_SIZE);
     }
 }
 
