@@ -21,10 +21,10 @@
 #include "vm/frames.h"
 
 static void syscall_handler (struct intr_frame *);
-static unsigned validate_user_string (char* user_str);
-static void validate_user_buffer (void* user_buf, int size);
-static void* uaddr_to_kaddr (const void* uaddr);
-static void* uaddr_to_kaddr_write (const void* uaddr, bool write);
+static unsigned validate_user_string (char* user_str, void *esp);
+static void validate_user_buffer (void* user_buf, int size, void *esp);
+static void* uaddr_to_kaddr (const void* uaddr, void *esp);
+static void* uaddr_to_kaddr_write (const void* uaddr, bool write, void *esp);
 static void unpin_page (void* uaddr);
 static void unpin_buffer (void* uaddr, int size);
 typedef int mapid_t;
@@ -243,10 +243,10 @@ syscall_mmap (int fd, void *vaddr) {
  * Takes a char* into userspace to validate. Returns the size of the string.
  */
 static unsigned
-validate_user_string (char* user_str)
+validate_user_string (char* user_str, void *esp)
 {
   // validate original pointer
-  char* kernel = uaddr_to_kaddr(user_str);
+  char* kernel = uaddr_to_kaddr(user_str, esp);
   uintptr_t current_page = pg_no(user_str);
   
   char* user = user_str;
@@ -260,7 +260,7 @@ validate_user_string (char* user_str)
     if (pg_no(user) != current_page)
     {
       //validate pointer again, because page has changed
-      kernel = uaddr_to_kaddr(user);
+      kernel = uaddr_to_kaddr(user, esp);
       current_page = pg_no(user);
     }
   }
@@ -276,14 +276,14 @@ validate_user_string (char* user_str)
  * The length of the buffer.
  */
 static void
-validate_user_buffer (void* user_buf, int size)
+validate_user_buffer (void* user_buf, int size, void *esp)
 {
   ASSERT(size >= 0);
   // validate original pointer
-  uaddr_to_kaddr(user_buf);
+  uaddr_to_kaddr(user_buf, esp);
   void* user = user_buf;
   // bytes remaining in page
-  unsigned remaining_bytes = PGSIZE - pg_ofs(user);
+  int remaining_bytes = PGSIZE - pg_ofs(user);
   if (remaining_bytes < size)
   {
     // buffer length is longer than the rest of the page
@@ -299,8 +299,8 @@ validate_user_buffer (void* user_buf, int size)
   // as long as size is at least one page, the buffer reaches
   // a new page which we have to check also
   do {
-    // validate pointer
-    uaddr_to_kaddr(user);
+    // validate pointer, esp
+    uaddr_to_kaddr(user, esp);
     // move pointer to next page
     size -= PGSIZE;
     user += PGSIZE;
@@ -310,13 +310,14 @@ validate_user_buffer (void* user_buf, int size)
 static void
 syscall_handler (struct intr_frame *f) 
 {
-  void *buffer_user, *buffer_kernel;
+  void *buffer_user;
   char *file_name, *file_name_uaddr, *exec_name, *exec_name_uaddr ;
   unsigned size, position, s_l;
   int status, pid, fd, mapid;
   void *vaddr;
 
-  uint32_t syscall_nr = *((uint32_t*) uaddr_to_kaddr(f->esp));
+  void *esp =f->esp;
+  uint32_t syscall_nr = *((uint32_t*) uaddr_to_kaddr(f->esp, esp));
   switch (syscall_nr) {
     case SYS_HALT:
                    log_debug("SYS_HALT\n");
@@ -324,31 +325,31 @@ syscall_handler (struct intr_frame *f)
                    break;                  /* Halt the operating system. */
     case SYS_EXIT:
                    log_debug("SYS_EXIT\n");
-                   status = *((int*) uaddr_to_kaddr(f->esp+4));
+                   status = *((int*) uaddr_to_kaddr(f->esp+4, esp));
                    syscall_exit(status);
                    unpin_page(f->esp+4);
                    break;                  /* Terminate this process. */
     case SYS_EXEC:
                    log_debug("SYS_EXEC\n");
-                   exec_name_uaddr = *((char**) uaddr_to_kaddr(f->esp+4)); /* char pointer in usermode */ 
-                   s_l = validate_user_string(exec_name_uaddr);
-                   exec_name = (char*) uaddr_to_kaddr(exec_name_uaddr); /* char pointer in kernel mode */
+                   exec_name_uaddr = *((char**) uaddr_to_kaddr(f->esp+4, esp)); /* char pointer in usermode */
+                   s_l = validate_user_string(exec_name_uaddr, esp);
+                   exec_name = (char*) uaddr_to_kaddr(exec_name_uaddr, esp); /* char pointer in kernel mode */
                    f->eax = syscall_exec(exec_name);
                    unpin_page(f->esp+4);
                    unpin_buffer(f->esp+4, s_l);
                    break; /* Start another process. */
     case SYS_WAIT:
                    log_debug("SYS_WAIT\n");
-                   pid = *((int*) uaddr_to_kaddr(f->esp+4));
+                   pid = *((int*) uaddr_to_kaddr(f->esp+4, esp));
                    f->eax = syscall_wait(pid);  /* Wait for a child process to die. */
                    unpin_page(f->esp+4);
                    break;
     case SYS_CREATE: 
                    log_debug("SYS_CREATE\n");
-                   file_name_uaddr = *((char**) uaddr_to_kaddr(f->esp+4)); /* char pointer in usermode */ 
-                   s_l = validate_user_string(file_name_uaddr);
-                   file_name = (char*) uaddr_to_kaddr(file_name_uaddr); /* char pointer in kernel mode */
-                   size = *((unsigned*) uaddr_to_kaddr(f->esp+8));
+                   file_name_uaddr = *((char**) uaddr_to_kaddr(f->esp+4, esp)); /* char pointer in usermode */
+                   s_l = validate_user_string(file_name_uaddr, esp);
+                   file_name = (char*) uaddr_to_kaddr(file_name_uaddr, esp); /* char pointer in kernel mode */
+                   size = *((unsigned*) uaddr_to_kaddr(f->esp+8, esp));
                    f->eax = syscall_create(file_name, size);
                    unpin_page(f->esp+4);
                    unpin_page(f->esp+8);
@@ -356,35 +357,34 @@ syscall_handler (struct intr_frame *f)
                    break;                /* Create a file. */
     case SYS_REMOVE:
                    log_debug("SYS_REMOVE\n");
-                   file_name_uaddr = *((char**) uaddr_to_kaddr(f->esp+4)); /* char pointer in usermode */ 
-                   s_l = validate_user_string(file_name_uaddr);
-                   file_name = (char*) uaddr_to_kaddr(file_name_uaddr); /* char pointer in kernel mode */
+                   file_name_uaddr = *((char**) uaddr_to_kaddr(f->esp+4, esp)); /* char pointer in usermode */
+                   s_l = validate_user_string(file_name_uaddr, esp);
+                   file_name = (char*) uaddr_to_kaddr(file_name_uaddr, esp); /* char pointer in kernel mode */
                    f->eax = syscall_remove(file_name);
                    unpin_page(f->esp+4);
                    unpin_buffer(f->esp+4, s_l);
                    break;                 /* Delete a file. */
     case SYS_OPEN:
                    log_debug("SYS_OPEN\n");
-                   file_name_uaddr = *((char**) uaddr_to_kaddr(f->esp+4)); /* char pointer in usermode */ 
-                   s_l = validate_user_string(file_name_uaddr);
-                   file_name = (char*) uaddr_to_kaddr(file_name_uaddr); /* char pointer in kernel mode */
+                   file_name_uaddr = *((char**) uaddr_to_kaddr(f->esp+4, esp)); /* char pointer in usermode */
+                   s_l = validate_user_string(file_name_uaddr, esp);
+                   file_name = (char*) uaddr_to_kaddr(file_name_uaddr, esp); /* char pointer in kernel mode */
                    f->eax = syscall_open(file_name);
                    unpin_page(f->esp+4);
                    unpin_buffer(f->esp+4, s_l);
                    break;                  /* Open a file. */
     case SYS_FILESIZE:
                    log_debug("SYS_FILESIZE\n");
-                   fd = *((int*) uaddr_to_kaddr(f->esp+4));
+                   fd = *((int*) uaddr_to_kaddr(f->esp+4, esp));
                    f->eax = syscall_filesize(fd);
                    break;              /* Obtain a file's size. */
     case SYS_READ:
                    log_debug("SYS_READ\n");
-                   fd = *((int*) uaddr_to_kaddr(f->esp+4));
-                   buffer_user = *((void**)uaddr_to_kaddr_write(f->esp+8,true)); /* void* in user mode */
-                   size = *((unsigned *)uaddr_to_kaddr(f->esp+12));
-                   validate_user_buffer(buffer_user, size); /* validates user input */
-                   buffer_kernel = uaddr_to_kaddr(buffer_user); /* void* in kernel mode */;
-                   f->eax = syscall_read(fd, buffer_kernel, size);
+                   fd = *((int*) uaddr_to_kaddr(f->esp+4, esp));
+                   buffer_user = *((void**)uaddr_to_kaddr_write(f->esp+8,true, esp)); /* void* in user mode */
+                   size = *((unsigned *)uaddr_to_kaddr(f->esp+12, esp));
+                   validate_user_buffer(buffer_user, size, esp); /* validates user input */
+                   f->eax = syscall_read(fd, buffer_user, size);
                    // TODO unpinning
                    unpin_page(f->esp+4);
                    unpin_page(f->esp+8);
@@ -393,12 +393,11 @@ syscall_handler (struct intr_frame *f)
                    break;    /* Read from a file. */
     case SYS_WRITE:
                    log_debug("SYS_WRITE\n");
-                   fd = *((int*) uaddr_to_kaddr(f->esp+4));
-                   buffer_user = *((void**)uaddr_to_kaddr(f->esp+8)); /* void* in user mode */
-                   size = *((unsigned *)uaddr_to_kaddr(f->esp+12));
-                   validate_user_buffer(buffer_user, size); /* validates user input */
-                   buffer_kernel = uaddr_to_kaddr(buffer_user); /* void* in kernel mode */
-                   f->eax = syscall_write(fd, buffer_kernel, size);
+                   fd = *((int*) uaddr_to_kaddr(f->esp+4, esp));
+                   buffer_user = *((void**)uaddr_to_kaddr(f->esp+8, esp)); /* void* in user mode */
+                   size = *((unsigned *)uaddr_to_kaddr(f->esp+12, esp));
+                   validate_user_buffer(buffer_user, size, esp); /* validates user input */
+                   f->eax = syscall_write(fd, buffer_user, size);
                    unpin_page(f->esp+4);
                    unpin_page(f->esp+8);
                    unpin_page(f->esp+12);
@@ -406,35 +405,35 @@ syscall_handler (struct intr_frame *f)
                    break;                  /* Write to a file. */
     case SYS_SEEK:
                    log_debug("SYS_SEEK\n");
-                   fd = *((int*) uaddr_to_kaddr(f->esp+4));
-                   position = *((unsigned*) uaddr_to_kaddr(f->esp+8));
+                   fd = *((int*) uaddr_to_kaddr(f->esp+4, esp));
+                   position = *((unsigned*) uaddr_to_kaddr(f->esp+8, esp));
                    syscall_seek(fd,position); 
                    unpin_page(f->esp+4);
                    unpin_page(f->esp+8);
                    break;  /* Change position in a file. */
     case SYS_TELL: 
                    log_debug("SYS_TELL\n");
-                   fd = *((int*) uaddr_to_kaddr(f->esp+4));
+                   fd = *((int*) uaddr_to_kaddr(f->esp+4, esp));
                    f->eax = syscall_tell(fd);
                    unpin_page(f->esp+4);
                    break;                  /* Report current position in a file. */
     case SYS_CLOSE:
                    log_debug("SYS_CLOSE\n");
-                   fd = *((int*) uaddr_to_kaddr(f->esp+4));
+                   fd = *((int*) uaddr_to_kaddr(f->esp+4, esp));
                    syscall_close(fd); 
                    unpin_page(f->esp+4);
                    break;                  /* Close a file. */
     case SYS_MMAP:
                    log_debug("SYS_MMAP\n");
-                   fd = *((int*) uaddr_to_kaddr(f->esp+4));
-                   vaddr = *((void**) uaddr_to_kaddr(f->esp+8));
+                   fd = *((int*) uaddr_to_kaddr(f->esp+4, esp));
+                   vaddr = *((void**) uaddr_to_kaddr(f->esp+8, esp));
                    f->eax = syscall_mmap(fd,vaddr);
                    unpin_page(f->esp+4);
                    unpin_page(f->esp+8);
                    break;
     case SYS_MUNMAP:
                    log_debug("SYS_MUNMAP\n");
-                   mapid = *((int*) uaddr_to_kaddr(f->esp+4));
+                   mapid = *((int*) uaddr_to_kaddr(f->esp+4, esp));
                    syscall_munmap(mapid);
                    unpin_page(f->esp+4);
                    break;
@@ -445,14 +444,14 @@ syscall_handler (struct intr_frame *f)
 }
 
 static void*
-uaddr_to_kaddr (const void* uaddr) {
-  return uaddr_to_kaddr_write(uaddr, false);
-} 
+uaddr_to_kaddr (const void* uaddr, void *esp) {
+  return uaddr_to_kaddr_write(uaddr, false, esp);
+}
 
-static void* 
-uaddr_to_kaddr_write (const void* uaddr, bool write) {
+static void*
+uaddr_to_kaddr_write (const void* uaddr, bool write, void *esp) {
   // check for null pointers
-  
+
   if (!uaddr) {
       goto error;
   }
@@ -470,13 +469,13 @@ uaddr_to_kaddr_write (const void* uaddr, bool write) {
         return uaddr;
       }
       else {
-        if (spage_valid_and_load(pg_round_down(uaddr), true)) {
+        if (spage_valid_and_load(uaddr, true, esp)) {
           return pagedir_get_page(thread_current()->pagedir, uaddr); 
        }
-      }   
+      }
     }
     else {
-      goto error; 
+      goto error;
     }
   }
 
@@ -496,7 +495,7 @@ unpin_buffer (void* uaddr, int size) {
   ASSERT(size >= 0);
   void* user = uaddr;
   // bytes remaining in page
-  unsigned remaining_bytes = PGSIZE - pg_ofs(user);
+  int remaining_bytes = PGSIZE - pg_ofs(user);
   unpin_page(user);
   if (remaining_bytes < size)
   {
@@ -509,7 +508,7 @@ unpin_buffer (void* uaddr, int size) {
     // buffer is inside one page, everything is correct
     return;
   }
-  
+
   // as long as size is at least one page, the buffer reaches
   // a new page which we have to check also
   do {

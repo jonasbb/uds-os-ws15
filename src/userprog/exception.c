@@ -171,18 +171,8 @@ page_fault (struct intr_frame *f)
   {
     if (not_present) {
         // check if access is valid anyway and map page if so
-        bool tmp = spage_valid_and_load(pg_round_down(fault_addr), false);
+        bool tmp = spage_valid_and_load(fault_addr, false, esp);
         if (!tmp) {
-            if (is_valid_stack_address(fault_addr, esp)) {
-              void *p = frame_get_free();
-              if (p == NULL) {
-                goto error;
-              }
-              if (!install_page(pg_round_down(fault_addr), p, true, false)) {
-                goto error;
-              }
-              return;
-            }
             // access to invalid address
             log_debug ("Handled page fault:\n");
             log_debug ("Page fault at %p: %s error %s page in %s context.\n",
@@ -204,7 +194,6 @@ page_fault (struct intr_frame *f)
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to
      which fault_addr refers. */
-error:
   printf ("Page fault at %p: %s error %s page in %s context.\n",
           fault_addr,
           not_present ? "not present" : "rights violation",

@@ -10,6 +10,8 @@
 #include "vm/swap.h"
 
 
+static bool is_valid_stack_address(void *addr,
+                                   void *esp);
 static bool install_not_present_page (void *upage);
 static bool spage_map_file(struct file *f,
                            size_t       ofs,
@@ -89,19 +91,41 @@ spage_destroy() {
 }
 
 bool
-spage_valid_and_load(void *vaddr, bool pin) {
-    log_debug("@@@ spage_valid_and_load called (tid: %d, vaddr 0x%08x) @@@\n",
-              thread_current()->tid, (uint32_t) vaddr);
-    ASSERT(pg_ofs(vaddr)==0);
+spage_valid_and_load(void *vaddr, bool pin, void *esp) {
+    // may be called from a kernel thread or a user thread in
+    // kernel mode the esp is already set
+    // if this is a user process the esp is saved in the
+    // thread struct
+    if (esp == 0) {
+      PANIC("ESP == 0");
+    }
+    log_debug("@@@ spage_valid_and_load called (tid: %d, vaddr 0x%08x, esp: 0x%08x) @@@\n",
+              thread_current()->tid, (uint32_t) vaddr, esp);
     bool success = true;
     void *p;
+    p = frame_get_free();
+
+    if (p == NULL) {
+            success = false;
+            goto done;
+    }
+
     struct spage_table_entry ecmp, *e;
     struct hash_elem *elem;
     struct thread *t = thread_current();
-    ecmp.vaddr = vaddr;
+    ecmp.vaddr = pg_round_down(vaddr);
     elem = hash_find(&t->sup_pagetable, &ecmp.elem);
+
     // valid if any element found
-    if (elem == NULL) {
+    if (elem == NULL
+        && is_valid_stack_address(vaddr, esp)) {
+        // install new stack page
+        if (!install_page(pg_round_down(vaddr), p, true, false)) {
+            success = false;
+        }
+        goto done;
+    }
+    else if (elem == NULL) {
         success = false;
         goto done;
     }
@@ -109,12 +133,6 @@ spage_valid_and_load(void *vaddr, bool pin) {
     e = hash_entry(elem, struct spage_table_entry, elem);
     if (!(e->flags & SPTE_IS_VALID)) {
       PANIC("Memory handling wrong!");
-    }
-    p = frame_get_free();
-
-    if (p == NULL) {
-            success = false;
-            goto done;
     }
 
     switch(e->backing) {
@@ -159,7 +177,7 @@ spage_valid_and_load(void *vaddr, bool pin) {
         NOT_REACHED();
     }
 
- 
+
 
 done:
     log_debug("@@@ spage_valid_and_load return: %s @@@\n",
@@ -228,7 +246,7 @@ spage_map_munmap(void *uaddr) {
     ecmp.vaddr = uaddr;
 
     // assert page loaded and pinned
-    spage_valid_and_load(uaddr, true);
+    spage_valid_and_load(uaddr, true, PHYS_BASE);
     // now we can delete the backing entry
     e_ = hash_delete(&thread_current()->sup_pagetable, &ecmp.elem);
     if (!e_) {
@@ -340,7 +358,7 @@ install_not_present_page (void *upage) {
           && pagedir_set_page_not_present (t->pagedir, upage));
 }
 
-bool
+static bool
 is_valid_stack_address(void * addr, void * esp) {
   return (addr < PHYS_BASE - PGSIZE) && (addr + 32 >= esp) && addr > STACK_MAX;
 }

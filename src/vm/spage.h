@@ -55,13 +55,15 @@ void spte_destroy(struct hash_elem *e,
                   void             *aux);
 
 void spage_destroy(void);
-bool spage_valid_and_load(void *vaddr, bool pin);
+bool spage_valid_and_load(void *vaddr, bool pin, void *esp);
 bool spage_map_mmap(struct file *f,
                     size_t       ofs,
                     void        *uaddr,
                     const bool   writeable,
                     size_t       size);
 void spage_map_munmap(void *uaddr);
+void spage_flush_mmap(struct spage_table_entry *e,
+                      void                     *kaddr);
 bool spage_map_segment(struct file *f,
                        size_t       ofs,
                        void        *uaddr,
@@ -69,8 +71,6 @@ bool spage_map_segment(struct file *f,
                        size_t       size);
 bool spage_map_zero(void *uaddr,
                     const bool writeable);
-                    
-bool is_valid_stack_address(void * addr, void * esp);
 
 bool install_page (void *upage, void *kpage, bool writable, bool pin);
 #endif
