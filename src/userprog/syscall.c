@@ -264,7 +264,6 @@ validate_user_string (char* user_str)
       current_page = pg_no(user);
     }
   }
-  printf("size: %d\n", (user - user_str + 1));
   return (unsigned) (user - user_str + 1);
 }
 
