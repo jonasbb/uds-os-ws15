@@ -50,6 +50,15 @@ We use a global lock for all vm operations. So races are not even possible.
 
 >> A5: Why did you choose the data structure(s) that you did for
 >> representing virtual-to-physical mappings?
+The page table was already present and we did not modify it in any
+way. It is specified by the Intel ABI.
+The supplementary page table is implemented as a hash table. This is
+mostly for easier implementation because we have a flat memory structure
+(or at least the interface). Implementation details are well hidden, as
+we can use the existing implementation for hash tables.
+We expect under normal circumstances only few entries in the supplementary
+page table so that a more advanced accessing scheme like the page tables
+is unnecessary as it would mostly map to nothing.
 
 		       PAGING TO AND FROM DISK
 		       =======================
