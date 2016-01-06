@@ -64,6 +64,14 @@ We use a global lock for all vm operations. So races are not even possible.
 
 >> B2: When a frame is required but none is free, some frame must be
 >> evicted.  Describe your code for choosing a frame to evict.
+We use a basic clock swipe algorithm.
+We iterate over our frame table until we find a suitable frame to evict.
+We skip all pinned frames.
+We skip frames we are not able to evict, because we don't know who "owns" them.
+If the accessed bit is set we clear it and it gets a second chance.
+Any pages we are now left with are suitable. If the page is writable
+we write it back to file or swap before eviction.
+Then the frame is free for eviction.
 
 >> B3: When a process P obtains a frame that was previously used by a
 >> process Q, how do you adjust the page table (and any other data
