@@ -19,6 +19,7 @@ Lukas Krämer <lkraemer@mmci.uni-saarland.de>
 >> Please cite any offline or online sources you consulted while
 >> preparing your submission, other than the Pintos documentation, course
 >> text, lecture notes, and course staff.
+Software reverse engineering lecture WS14/15
 
 			PAGE TABLE MANAGEMENT
 			=====================
@@ -69,6 +70,15 @@ Lukas Krämer <lkraemer@mmci.uni-saarland.de>
 >> B4: Explain your heuristic for deciding whether a page fault for an
 >> invalid virtual address should cause the stack to be extended into
 >> the page that faulted.
+The documentation describes that PUSH and PUSHA may fault up to
+32 *below* the stack pointer. In the Software Reverse Engineering lecture
+we learned that the value in ESP *must* be lower or equal to any accesses
+on the stack (for the x86 ABI). Additionally the stack must be limited
+in total size. We combine these rules.
+
+A page fault will extend the stack if it faults no more than 32 byte
+below the stack pointer and the fault address is at most 2MB from
+the top of the stack.
 
 ---- SYNCHRONIZATION ----
 
