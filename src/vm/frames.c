@@ -242,7 +242,12 @@ frame_evict() {
                                         pg_no_to_addr(frametable.frametable[frametable.evict_ptr].virt_address), false);
                         continue;
                     }
-                        
+
+                    // First we MUST mark the page as not present so that no
+                    // further accesses and modifications of the page content
+                    // are possible
+                    pagedir_set_not_present(t->pagedir,
+                                    pg_no_to_addr(frametable.frametable[frametable.evict_ptr].virt_address));
                     if (old_pte->writable) {
                         struct spage_table_entry ecmp, *e;
                         struct hash_elem *elem;
@@ -272,13 +277,10 @@ frame_evict() {
                         }
                         
                     }
-                    pagedir_set_not_present(t->pagedir, 
-                                    pg_no_to_addr(frametable.frametable[frametable.evict_ptr].virt_address));
                     frametable.frametable[frametable.evict_ptr].pte = (void*) 0xFFFFFFFF;
                     void* tmp = pagenum_to_page(frametable.evict_ptr);
                     log_debug("### Evict page at 0x%08x ###\n", (uint32_t) tmp);
                     frametable.evict_ptr = (frametable.evict_ptr + 1) % frametable.size;
-                                                  
                     return tmp;
             }
                         // jump to next position
