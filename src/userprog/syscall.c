@@ -22,11 +22,11 @@
 
 static void syscall_handler (struct intr_frame *);
 static void validate_user_string (char* user_str);
-static void validate_user_buffer (void* user_buf, unsigned size);
+static void validate_user_buffer (void* user_buf, int size);
 static void* uaddr_to_kaddr (const void* uaddr);
 static void* uaddr_to_kaddr_write (const void* uaddr, bool write);
 static void unpin_page (void* uaddr);
-static void unpin_buffer (void* uaddr, unsigned size);
+static void unpin_buffer (void* uaddr, int size);
 typedef int mapid_t;
 
 void
@@ -275,8 +275,9 @@ validate_user_string (char* user_str)
  * The length of the buffer.
  */
 static void
-validate_user_buffer (void* user_buf, unsigned size)
+validate_user_buffer (void* user_buf, int size)
 {
+  ASSERT(size >= 0);
   // validate original pointer
   uaddr_to_kaddr(user_buf);
   void* user = user_buf;
@@ -296,14 +297,13 @@ validate_user_buffer (void* user_buf, unsigned size)
   
   // as long as size is at least one page, the buffer reaches
   // a new page which we have to check also
-  for (; size > PGSIZE;)
-  {
+  do {
+    // validate pointer
+    uaddr_to_kaddr(user);
     // move pointer to next page
     size -= PGSIZE;
     user += PGSIZE;
-    // validate pointer
-    uaddr_to_kaddr(user);
-  }
+  } while (size > 0);
 }
 
 static void
@@ -487,7 +487,8 @@ unpin_page (void* uaddr) {
 }
 
 static void
-unpin_buffer (void* uaddr, unsigned size) {
+unpin_buffer (void* uaddr, int size) {
+  ASSERT(size >= 0);
   void* user = uaddr;
   // bytes remaining in page
   unsigned remaining_bytes = PGSIZE - pg_ofs(user);
@@ -505,14 +506,13 @@ unpin_buffer (void* uaddr, unsigned size) {
   
   // as long as size is at least one page, the buffer reaches
   // a new page which we have to check also
-  for (; size > PGSIZE;)
-  {
+  do {
+    // unpin page
+    unpin_page(user);
     // move pointer to next page
     size -= PGSIZE;
     user += PGSIZE;
-    // unpin page
-    unpin_page(user);
-  }
+  } while (size > 0);
 }
 
 static void
