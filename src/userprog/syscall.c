@@ -310,7 +310,7 @@ syscall_handler (struct intr_frame *f)
   void *buffer_user, *buffer_kernel;
   char *file_name, *file_name_uaddr, *exec_name, *exec_name_uaddr ;
   unsigned size, position;
-  int status, pid, fd;
+  int status, pid, fd, mapid;
   void *vaddr;
 
   uint32_t syscall_nr = *((uint32_t*) uaddr_to_kaddr(f->esp));
@@ -391,8 +391,8 @@ syscall_handler (struct intr_frame *f)
                    f->eax = syscall_mmap(fd,vaddr);
                    break;
     case SYS_MUNMAP:
-                   fd = *((int*) uaddr_to_kaddr(f->esp+4));
-                   syscall_munmap(fd);
+                   mapid = *((int*) uaddr_to_kaddr(f->esp+4));
+                   syscall_munmap(mapid);
                    break;
     default:
                    syscall_exit(-1);

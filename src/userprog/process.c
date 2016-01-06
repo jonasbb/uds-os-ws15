@@ -1109,7 +1109,7 @@ setup_stack (void **esp_, char *cmdline_, char **save_ptr)
         uint32_t *esp_start, *esp_end, *esp;
         uint32_t argc = 0;
         esp = *esp_;
-        esp = PHYS_BASE;
+        esp = PHYS_BASE - PGSIZE - 4;
         
 #define PUSH(PTR, VAL) PTR -= 1; *PTR = VAL;
         // first argument on the stack is a pointer to the page we also need to free

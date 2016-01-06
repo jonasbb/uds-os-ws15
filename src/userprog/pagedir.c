@@ -112,6 +112,7 @@ pagedir_set_page (uint32_t *pd, void *upage, void *kpage, bool writable)
   if (pte != NULL) 
     {
       ASSERT ((*pte & PTE_P) == 0);
+      log_debug("$$$ Install user page at 0x%08x $$$\n", upage);
       *pte = pte_create_user (kpage, writable);
 
       // TODO update frame table
@@ -140,6 +141,7 @@ pagedir_set_page_not_present(uint32_t *pd,
   if (pte != NULL)
     {
       ASSERT ((*pte & PTE_P) == 0);
+      log_debug("$$$ Install (lazy) user page at 0x%08x $$$\n", upage);
       *pte = pte_create_user_not_present ();
       return true;
     }
@@ -180,6 +182,7 @@ pagedir_clear_page (uint32_t *pd, void *upage)
   pte = lookup_page (pd, upage, false);
   if (pte != NULL && (*pte & PTE_P) != 0)
     {
+      log_debug("$$$ Remove user page at 0x%08x $$$\n", upage);
       // TODO update frame table
       frame_remove(pte_get_page(*pte));
       *pte &= ~(PTE_P | PTE_ASSIGNED);
