@@ -68,6 +68,15 @@ We use a global lock for all vm operations. So races are not even possible.
 >> B3: When a process P obtains a frame that was previously used by a
 >> process Q, how do you adjust the page table (and any other data
 >> structures) to reflect the frame Q no longer has?
+The first step is removing the present bit in the page table of Q
+for the virtual address mapped to a frame. This quarantees that we
+can savely assign the frame to another process (as long as we are
+able to restore the content). If the present bit is not set the
+bits for the virtual addresses have no defined use, we do not need
+to delete the physical address in the page table. We add correct
+entries in the supplementary page table of Q to restore the frame
+again if they are not already present. We are now free to reuse
+the frame for P.
 
 >> B4: Explain your heuristic for deciding whether a page fault for an
 >> invalid virtual address should cause the stack to be extended into
