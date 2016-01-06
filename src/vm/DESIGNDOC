@@ -29,6 +29,124 @@ Software reverse engineering lecture WS14/15
 >> A1: Copy here the declaration of each new or changed `struct' or
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
+#define PTE_ASSIGNED 0x200      /* Address is assigned to user process */
+
+struct pagetable_entry {
+    bool present : 1;
+    bool writable : 1;
+    bool kernel : 1;
+    bool unused1 : 1;
+    bool unused2 : 1;
+    bool accessed : 1;
+    bool dirty : 1;
+    bool unused3 : 1;
+    bool unused4 : 1;
+    unsigned int available : 3;
+    uint32_t address : 20;
+};
+; a nicer way to access a PTE
+
+struct lock {
+  struct thread *holder;      /* Thread holding lock (for debugging). */
+  struct semaphore semaphore; /* Binary semaphore controlling access. */
+  int cnt;                    /* For reentrant locks */
+};
+
+in struct thread added:
+#ifdef VM
+    struct hash sup_pagetable;
+#endif
+; value for supplementary page table
+
+extern struct lock vm_lock;     // pagedir.h
+struct lock vm_lock;            // pagedir.c
+; lock for the whole VM subsystem
+
+struct frametable {
+    // Number of frametable entries in the array
+    uint32_t size;
+    // Counts the number of frames in use
+    // must always be >= 0 and < size
+    uint32_t used;
+    // Counts the number of frames to store the frametable
+    // must always be >= 0 and < size
+    uint32_t own_used;
+    // Points to the next frametable entry for inspection
+    // must always be >= 0 and < size
+    uint32_t evict_ptr;
+    // Points to the start location of the next free frame
+    // must always be >= 0 and < size
+    uint32_t search_ptr;
+    // Array of framtable entries
+    // contains `size` many entries
+    struct frametable_entry* frametable;
+    // first page in consecutive memory segment
+    // used for page number calculations
+    void* base_addr;
+};
+; all needed variables for implementing the frame table
+
+struct frametable frametable;
+; the variable containing the struct which contains all other variables
+
+struct frametable_entry {
+    struct pagetable_entry* pte;
+    tid_t tid; // TODO this is limited, may be merged with virtual address below
+    uint32_t virt_address : 20;
+    // pin frame, not swapable
+    bool pin : 1;
+};
+; contains data about one particular frame
+; everything to access the page table which is using this frame
+; and frametable implementation specifics
+
+#define STACK_MAX ((void *) PHYS_BASE - 512 * PGSIZE)
+; stack size limit for page fault handler and stack growth
+
+enum spte_backing {
+    SWAPPED  = 0,
+    FROMFILE = 1,
+    ZEROPAGE = 2
+};
+typedef uint8_t spte_backing;
+; enum used for discriminated union in a later struct
+; defines all backing store possibilities
+
+enum spte_flags {
+    SPTE_W    = 1 << 0,
+    SPTE_MMAP = 1 << 7,
+    SPTE_IS_VALID = 1 << 2
+};
+typedef uint8_t spte_flags;
+; different states and permissions we need to know
+; about the page or the backing store
+
+typedef struct spage_table_entry {
+    // hashable entry
+    struct hash_elem elem;
+    // <hash> These elements are relevant for the hash
+    void *vaddr;
+    // </hash>
+
+    spte_backing backing;
+    spte_flags flags;
+    union {
+        /* swapped */
+        struct swaptable_entry *st_e;
+        /* file */
+        struct {
+            // file as backing store
+            struct file *file;
+            // offset within file
+            size_t file_ofs;
+            size_t file_size;
+        };
+    };
+} spte;
+; one entry for the supplementary page table
+; this holds all information necessary to be able to
+; load a page from any backing store (swap, mmap, file, zero)
+; and install it into the correct page directory
 
 ---- ALGORITHMS ----
 
