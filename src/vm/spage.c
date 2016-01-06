@@ -99,6 +99,10 @@ spage_valid_and_load(void *vaddr, bool pin, void *esp) {
     if (esp == 0) {
       PANIC("ESP == 0");
     }
+    struct thread *t = thread_current();
+    // fast exit is page is already loaded
+    if (pagedir_is_present(t->pagedir, pg_round_down(vaddr)))
+        return true;
     log_debug("@@@ spage_valid_and_load called (tid: %d, vaddr 0x%08x, esp: 0x%08x) @@@\n",
               thread_current()->tid, (uint32_t) vaddr, esp);
     bool success = true;
@@ -112,7 +116,6 @@ spage_valid_and_load(void *vaddr, bool pin, void *esp) {
 
     struct spage_table_entry ecmp, *e;
     struct hash_elem *elem;
-    struct thread *t = thread_current();
     ecmp.vaddr = pg_round_down(vaddr);
     elem = hash_find(&t->sup_pagetable, &ecmp.elem);
 
