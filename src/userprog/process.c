@@ -264,6 +264,7 @@ close_mmaplist(int pid)
 mapid_t
 insert_mmaplist(pid_t pid, void *base_addr, struct file *f)
 {
+  log_debug("    insert_mmaplist (pid: %d)    \n", pid);
   lock_acquire(&pid_lock);
   struct mmaplist_item *e = malloc(sizeof(struct mmaplist_item));
   e->data.file = f;
@@ -280,6 +281,7 @@ insert_mmaplist(pid_t pid, void *base_addr, struct file *f)
 bool
 inc_pgcount_mmaplist(pid_t pid, mapid_t mapid)
 {
+  log_debug("    inc_pgcount_mmaplist (pid: %d, mapid: %d)    \n", pid, mapid);
   lock_acquire(&pid_lock);
   struct list_elem *e;
   bool result = false;
@@ -304,6 +306,7 @@ inc_pgcount_mmaplist(pid_t pid, mapid_t mapid)
 void
 delete_mmaplist(pid_t pid, mapid_t mapid)
 {
+  log_debug("    delete_mmaplist (pid: %d, mapid: %d)    \n", pid, mapid);
   lock_acquire(&pid_lock);
   struct list_elem *e;
 
