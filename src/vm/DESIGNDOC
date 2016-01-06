@@ -88,6 +88,30 @@ the top of the stack.
 >> particular, explain how it prevents deadlock.  (Refer to the
 >> textbook for an explanation of the necessary conditions for
 >> deadlock.)
+There are four conditions which must all be met for the possibility
+of a page fault.
+1. Mutually exclusive access
+2. No resource preemption
+3. Hold and wait
+4. Cycle in wait-for graph
+
+These map to our implementation in the following way:
+1. The lock for the VM subsystem is exclusive. This condition is met.
+2. A lock may only be released by the thread holding it. It cannot be
+   preempted. This conditions is met.
+3. We do not restrict that a process may hold multiple resources. The
+   swap subsystem uses a different lock which can only be tried to be aquired
+   while holding the VM lock. No process will ever need to wait for the
+   swap lock. This condition is met.
+4. There is only one VM lock. All lock accesses to the swap lock must first
+   aquire the VM lock, so there is no cycle there. The filesystem lock
+   could be problematic, but syscalls will first pin all pages, so that
+   the VM lock will never be needed while performing the actual syscall
+   which means there can never be a dependency from the filesystem lock
+   to the VM lock. This conditions is not met.
+
+There can never be any deadlocks in our system as only 3/4 conditions
+are met.
 
 >> B6: A page fault in process P can cause another process Q's frame
 >> to be evicted.  How do you ensure that Q cannot access or modify
