@@ -162,6 +162,10 @@ spage_valid_and_load(void *vaddr, bool pin, void *esp) {
             frame_remove(p);
         }
         pagedir_set_dirty(t->pagedir, e->vaddr, false);
+        if (!(e->flags & SPTE_MMAP) && (e->flags & SPTE_W)) {
+            hash_delete(&t->sup_pagetable,e);
+            free(e);
+        }
         break;
 
     case ZEROPAGE:;
@@ -373,7 +377,7 @@ is_valid_stack_address(void * addr, void * esp) {
  */
 bool
 spage_map_swap(void *uaddr,
-               struct swaptable_entry * st_e) {
+               struct swaptable_entry * st_e, struct thread * t) {
     ASSERT(pg_ofs(uaddr) == 0);
 
     struct spage_table_entry *e = malloc(sizeof (*e));
@@ -385,6 +389,5 @@ spage_map_swap(void *uaddr,
 
     // insert w/o replace
     // NULL if insert successful
-    return install_not_present_page(uaddr)
-                 && hash_insert(&thread_current()->sup_pagetable, &e->elem) == NULL;
+    return hash_insert(&t->sup_pagetable, &e->elem) == NULL;
 }
