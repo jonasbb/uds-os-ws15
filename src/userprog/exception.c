@@ -153,18 +153,20 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
   
+  // Get thread
+  struct thread * t = thread_current();
   // Get esp 
   void *esp;
   if (f->cs == SEL_KCSEG) {
     // If kernel interrupts take esp from thread
-    esp = thread_current()->stack;
+    esp = t->stack;
   }
   else {
     // Otherwise from interupt frame
     esp = f->esp;
   }
   
-  // handle user page faults by killing the process
+  // handle user page faults
   if (user)
   {
     if (not_present) {
