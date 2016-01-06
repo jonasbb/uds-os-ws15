@@ -16,11 +16,14 @@
 #include "userprog/process.h"
 #include "userprog/syscall.h"
 #include "lib/user/syscall.h"
+#include "lib/round.h"
+#include "vm/spage.h"
 
 static void syscall_handler (struct intr_frame *);
 static void validate_user_string (char* user_str);
 static void validate_user_buffer (void* user_buf, unsigned size);
 static void* uaddr_to_kaddr (const void* uaddr);
+typedef int mapid_t;
 
 void
 syscall_init (void) 
@@ -178,7 +181,54 @@ syscall_close (int fd) {
   delete_fdlist(thread_current()->pid, fd);
 
   file_close(f);
+}
 
+static void
+syscall_munmap(mapid_t mapid) {
+    pid_t pid = thread_current()->pid;
+    delete_mmaplist(pid, mapid);
+}
+
+static mapid_t
+syscall_mmap (int fd, void *vaddr) {
+  struct file *f = get_fdlist(thread_current()->pid, fd);
+  if (!f) // file does not exist
+    return -1;
+  if (vaddr == NULL)
+    return -1;
+  if (pg_ofs(vaddr) != 0)
+    return -1;
+
+  size_t fsize = file_length(f);
+  if (fsize == 0)
+    return -1;
+  size_t pgcount = DIV_ROUND_UP(fsize, PGSIZE);
+
+  // check memory range for overlaps with already existing mappings
+  for(size_t i = 0; i < pgcount; i++) {
+    if (pagedir_is_assigned(thread_current()->pagedir, vaddr + i * PGSIZE))
+      return -1;
+  }
+
+  struct file *f_ = file_reopen(f);
+  if (!f_)
+    return -1;
+  pid_t pid = thread_current()->pid;
+  mapid_t mapid = insert_mmaplist(pid, vaddr, f_);
+  for(size_t i = 0, s = fsize; i < pgcount; i++, s -= PGSIZE) {
+    if (spage_map_mmap(f_,
+                       i * PGSIZE,
+                       vaddr + i * PGSIZE,
+                       true,
+                       s > PGSIZE ? PGSIZE : s)) {
+      inc_pgcount_mmaplist(pid, mapid);
+    } else {
+      // mapping failed, undo everything
+      syscall_munmap(mapid);
+      return -1;
+    }
+  }
+  return mapid;
 }
 
 /*
@@ -258,7 +308,8 @@ syscall_handler (struct intr_frame *f)
   void *buffer_user, *buffer_kernel;
   char *file_name, *file_name_uaddr, *exec_name, *exec_name_uaddr ;
   unsigned size, position;
-  int status, pid, fd;
+  int status, pid, fd, mapid;
+  void *vaddr;
 
   uint32_t syscall_nr = *((uint32_t*) uaddr_to_kaddr(f->esp));
   printf("SysCall_NR.: %i\n" ,syscall_nr);
@@ -335,6 +386,15 @@ syscall_handler (struct intr_frame *f)
                    fd = *((int*) uaddr_to_kaddr(f->esp+4));
                    syscall_close(fd); 
                    break;                  /* Close a file. */
+    case SYS_MMAP:
+                   fd = *((int*) uaddr_to_kaddr(f->esp+4));
+                   vaddr = *((void**) uaddr_to_kaddr(f->esp+8));
+                   f->eax = syscall_mmap(fd,vaddr);
+                   break;
+    case SYS_MUNMAP:
+                   mapid = *((int*) uaddr_to_kaddr(f->esp+4));
+                   syscall_munmap(mapid);
+                   break;
     default:
                    syscall_exit(-1);
                    break; /* Should not happen */ 

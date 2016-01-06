@@ -119,6 +119,7 @@ pagedir_set_page_pin (uint32_t *pd, void *upage, void *kpage, bool writable, boo
     {
       ASSERT ((*pte & PTE_P) == 0);
       frame_set_pin(kpage,pin);
+      log_debug("$$$ Install user page at 0x%08x $$$\n", upage);
       *pte = pte_create_user (kpage, writable);
 
       // TODO update frame table
@@ -147,6 +148,7 @@ pagedir_set_page_not_present(uint32_t *pd,
   if (pte != NULL)
     {
       ASSERT ((*pte & PTE_P) == 0);
+      log_debug("$$$ Install (lazy) user page at 0x%08x $$$\n", upage);
       *pte = pte_create_user_not_present ();
       return true;
     }
@@ -172,7 +174,7 @@ pagedir_get_page (uint32_t *pd, const void *uaddr)
     return NULL;
 }
 
-/* Marks user virtual page UPAGE "not present" in page
+/* Marks user virtual page UPAGE not assigned and not present
    directory PD.  Later accesses to the page will fault.  Other
    bits in the page table entry are preserved.
    UPAGE need not be mapped. */
@@ -187,12 +189,14 @@ pagedir_clear_page (uint32_t *pd, void *upage)
   pte = lookup_page (pd, upage, false);
   if (pte != NULL && (*pte & PTE_P) != 0)
     {
+      log_debug("$$$ Remove user page at 0x%08x $$$\n", upage);
       // TODO update frame table
-      frame_remove(pte_get_page(pte));
-      *pte &= ~PTE_P;
+      frame_remove(pte_get_page(*pte));
+      *pte &= ~(PTE_P | PTE_ASSIGNED);
       invalidate_pagedir (pd);
     }
 }
+
 /* Returns true if the PTE for virtual page VPAGE in PD is assigned,
    that is the address is a valid address
    Returns false if PD contains no PTE for VPAGE. */

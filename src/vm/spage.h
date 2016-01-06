@@ -60,6 +60,7 @@ bool spage_map_mmap(struct file *f,
                     void        *uaddr,
                     const bool   writeable,
                     size_t       size);
+void spage_map_munmap(void *uaddr);
 bool spage_map_segment(struct file *f,
                        size_t       ofs,
                        void        *uaddr,

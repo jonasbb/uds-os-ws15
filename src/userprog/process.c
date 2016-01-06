@@ -8,6 +8,7 @@
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
 #include "userprog/tss.h"
+#include "userprog/syscall.h"
 #include "filesys/directory.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
@@ -76,6 +77,12 @@ struct fdlist_item
   struct file *file;
 };
 
+struct mmaplist_item
+{
+  struct list_elem elem;
+  struct mmapdata data;
+};
+
 struct process_state_item
 {
   // tid of this process
@@ -102,6 +109,10 @@ struct process_state_item
   // open file descriptor list
   int nextfd;
   struct list fdlist;
+
+  // mmaped files
+  int nextmapid;
+  struct list mmaplist;
 };
 
 // contains for all pid an entry
@@ -196,6 +207,7 @@ clear_process_state_(pid_t pid, bool init_list)
   process_states[pid].exit_status_value = PROCESS_NO_EXIT_STATUS;
   process_states[pid].wait_for_child = 0;
   process_states[pid].nextfd = 2;
+  process_states[pid].nextmapid = 1;
   if (init_list)
   {
     process_states[pid].file = NULL;
@@ -203,6 +215,7 @@ clear_process_state_(pid_t pid, bool init_list)
     // initialize a new list
     list_init (&process_states[pid].to_wait_on_list);
     list_init (&process_states[pid].fdlist);
+    list_init (&process_states[pid].mmaplist);
   }
   else
   {
@@ -226,13 +239,93 @@ clear_process_state_(pid_t pid, bool init_list)
     
     // Cleanup fdlist
     close_fdlist(pid);
+    close_mmaplist(pid);
 
     e = NULL;
 
   };
 }
 
-/* Function to cleanup fdlist. */
+/* function to cleanup mmaplist. */
+void
+close_mmaplist(int pid)
+{
+  struct list_elem *e;
+  while (!list_empty(&process_states[pid].mmaplist))
+    {
+      e = list_front(&process_states[pid].mmaplist);
+      struct mmaplist_item *e_ = list_entry (e, struct mmaplist_item, elem);
+      delete_mmaplist(pid, e_->data.mapid);
+    }
+}
+
+/* function to insert mappings into the mmaplist.
+   returns the mapid used for this mapping */
+mapid_t
+insert_mmaplist(pid_t pid, void *base_addr, struct file *f)
+{
+  lock_acquire(&pid_lock);
+  struct mmaplist_item *e = malloc(sizeof(struct mmaplist_item));
+  e->data.file = f;
+  e->data.base_addr = base_addr;
+  e->data.pgcount = 0;
+  e->data.mapid = process_states[pid].nextmapid++;
+  list_push_back(&process_states[pid].mmaplist, (struct list_elem *) e);
+  lock_release(&pid_lock);
+  return e->data.mapid;
+}
+
+/* function to insert mappings into the mmaplist.
+   returns the mapid used for this mapping */
+bool
+inc_pgcount_mmaplist(pid_t pid, mapid_t mapid)
+{
+  lock_acquire(&pid_lock);
+  struct list_elem *e;
+  bool result = false;
+
+  for (e = list_begin (&process_states[pid].mmaplist); e != list_end (&process_states[pid].mmaplist);
+    e = list_next (e))
+    {
+      struct mmaplist_item *e_ = list_entry (e, struct mmaplist_item, elem);
+      if (e_->data.mapid == mapid) {
+        e_->data.pgcount++;
+        result = true;
+        break;
+      }
+    }
+  lock_release(&pid_lock);
+  return result;
+}
+
+
+/* function to delete mappings from the mmaplist.
+   returns true if mapping was found otherwise returns false */
+void
+delete_mmaplist(pid_t pid, mapid_t mapid)
+{
+  lock_acquire(&pid_lock);
+  struct list_elem *e;
+
+  for (e = list_begin (&process_states[pid].mmaplist); e != list_end (&process_states[pid].mmaplist);
+    e = list_next (e))
+    {
+      struct mmaplist_item *e_ = list_entry (e, struct mmaplist_item, elem);
+      if (e_->data.mapid == mapid) {
+        list_remove(e);
+        for(size_t i = 0; i < e_->data.pgcount; i++) {
+            spage_map_munmap(e_->data.base_addr + i * PGSIZE);
+        }
+        file_close(e_->data.file);
+        free(e_);
+        break;
+      }
+    }
+  lock_release(&pid_lock);
+  return;
+}
+
+/* function to cleanup fdlist. */
 void
 close_fdlist(int pid)
 {
@@ -247,8 +340,8 @@ close_fdlist(int pid)
     }
 }
 
-/* Function to insert files into the fdlist.
-   Returns the fd used for this file */
+/* function to insert files into the fdlist.
+   returns the fd used for this file */
 int
 insert_fdlist(pid_t pid, struct file* f)
 {
@@ -262,8 +355,8 @@ insert_fdlist(pid_t pid, struct file* f)
 }
 
 
-/* Function to delete files from the fdlist.
-   Returns true if file was found otherwise returns false */
+/* function to delete files from the fdlist.
+   returns true if file was found otherwise returns false */
 bool
 delete_fdlist(pid_t pid, int fd)
 {
@@ -286,8 +379,8 @@ delete_fdlist(pid_t pid, int fd)
   return result;
 }
 
-/* Returns the file struct pointer given the pid and the filedescriptor.
-   If filedescriptor is unused returns NULL. */
+/* returns the file struct pointer given the pid and the filedescriptor.
+   if filedescriptor is unused returns null. */
 struct file*
 get_fdlist(pid_t pid, int fd)
 {
@@ -599,6 +692,7 @@ process_exit_with_value (int exit_value)
   lock_release(&pid_lock);
 
   // cleanup additional entries
+  close_mmaplist(pid);
   spage_destroy();
   
   thread_exit();
@@ -1015,7 +1109,7 @@ setup_stack (void **esp_, char *cmdline_, char **save_ptr)
         uint32_t *esp_start, *esp_end, *esp;
         uint32_t argc = 0;
         esp = *esp_;
-        esp = PHYS_BASE;
+        esp = PHYS_BASE - PGSIZE - 4;
         
 #define PUSH(PTR, VAL) PTR -= 1; *PTR = VAL;
         // first argument on the stack is a pointer to the page we also need to free
