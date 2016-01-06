@@ -88,6 +88,7 @@ bool
 spage_valid_and_load(void *vaddr, bool pin) {
     log_debug("@@@ spage_valid_and_load called (tid: %d, vaddr 0x%08x) @@@\n",
               thread_current()->tid, (uint32_t) vaddr);
+    ASSERT(pg_ofs(vaddr)==0);
     bool success = true;
     void *p;
     struct spage_table_entry ecmp, *e;
