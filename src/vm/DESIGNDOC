@@ -142,6 +142,20 @@ Afterwards we unpin all frames previously pinned.
 
 >> C3: Explain how you determine whether a new file mapping overlaps
 >> any existing segment.
+Every mapping we create, if it is a file, a segment, stack, mmaps,
+will create a dummy entry in the page table. This dummy address will
+set one of the three bits available for operating system use.
+We use this bit to note all virtual pages which are valid for the
+user process to access.
+If a mapping becomes invalid, especially munmap(), we remove this
+bit for all pages which were mapped before. This keeps the page
+table consistent.
+For a new file mapping we search in the page table all virtual
+addresses which we need to successfully map the new file. If any
+of those addresses is already present in the page table with
+this bit set we cannot map this file as it is too large for this
+virtual address.
+We then indicate an error to the user process.
 
 ---- RATIONALE ----
 
