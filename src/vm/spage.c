@@ -122,6 +122,12 @@ spage_valid_and_load(void *vaddr, bool pin) {
 
         swap_read(e->st_e, p);
         e->flags &= ~SPTE_IS_VALID;
+        if (!install_page(e->vaddr, p, e->flags & SPTE_W, pin)) {
+            success = false;
+            frame_remove(p);
+        }
+        hash_delete(&t->sup_pagetable,e);
+        free(e);
         break;
 
     case FROMFILE:
@@ -132,22 +138,28 @@ spage_valid_and_load(void *vaddr, bool pin) {
         // check to read enough bytes
         size_t bread = file_read_at(e->file, p, e->file_size, e->file_ofs);
         success = bread == e->file_size;
-
+        if (!install_page(e->vaddr, p, e->flags & SPTE_W, pin)) {
+            success = false;
+            frame_remove(p);
+        }
         break;
 
     case ZEROPAGE:;
 
         memset(p, 0, PGSIZE);
+        if (!install_page(e->vaddr, p, e->flags & SPTE_W, pin)) {
+            success = false;
+            frame_remove(p);
+        }
+        hash_delete(&t->sup_pagetable,e);
+        free(e);
         break;
 
     default:
         NOT_REACHED();
     }
 
-  if (!install_page(e->vaddr, p, e->flags & SPTE_W, pin)) {
-    success = false;
-    frame_remove(p);
-  }
+ 
 
 done:
     log_debug("@@@ spage_valid_and_load return: %s @@@\n",
