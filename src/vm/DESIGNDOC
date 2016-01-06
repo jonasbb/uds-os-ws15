@@ -96,6 +96,10 @@ the top of the stack.
 >> the file system or swap.  How do you ensure that a second process Q
 >> cannot interfere by e.g. attempting to evict the frame while it is
 >> still being read in?
+We have a single global lock which covers the page table, supplementary
+page table and frame table. At least one of those is required for a
+page fault and evicting frames. All accesses are sequential so no
+data races are possible.
 
 >> B8: Explain how you handle access to paged-out pages that occur
 >> during system calls.  Do you use page faults to bring in pages (as
