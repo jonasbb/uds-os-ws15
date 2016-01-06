@@ -124,6 +124,16 @@ Afterwards we unpin all frames previously pinned.
 >> possibility for deadlock but allows for high parallelism.  Explain
 >> where your design falls along this continuum and why you chose to
 >> design it this way.
+We decided to use a single lock for the whole memory subsystem which
+includes the page tables (pagedir.c) for all threads, frame table (frames.c)
+and supplementary page table (spage.c). Reasons for this decision include:
+1. It is much more easy to implement locking correctly.
+2. Those three files are heavily depending on each other which makes
+   figuring out a sensible log order aquiring, which avoids deadlocks, at
+   least, complicated.
+3. We are behind the deadline and do not want to waste time one a more
+   efficient implementation if not necessary.
+
 
 			 MEMORY MAPPED FILES
 			 ===================
