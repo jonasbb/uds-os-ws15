@@ -102,6 +102,19 @@ the top of the stack.
 >> in user programs), or do you have a mechanism for "locking" frames
 >> into physical memory, or do you use some other design?  How do you
 >> gracefully handle attempted accesses to invalid virtual addresses?
+In the last project we implemented a check-then-access pattern for
+user memory in syscalls. This allowed us to easily extend the `check`
+part to also handle memory.
+While we test whether the user process owns the addresses, which it gave to
+us as parameters, we load all virtual addresses in the user space
+and pin the corresponding frame.
+We have a single function which loads the pages in case of a page fault
+and we reuse it to assert that all pages are loaded, if not already
+present in the page table, and all frames pinned.
+This function notifies us if the loading of a page failed, which means
+it was never before assigned as a valid virtual address for this
+user process. We can then terminate the offending process.
+Afterwards we unpin all frames previously pinned.
 
 ---- RATIONALE ----
 
