@@ -90,9 +90,12 @@ file_read (struct file *file, void *buffer, off_t size)
 off_t
 file_read_at (struct file *file, void *buffer, off_t size, off_t file_ofs) 
 {
-  lock_acquire(&fs_lock);
+  bool need_lock = !lock_held_by_current_thread(&fs_lock);
+  if (need_lock)
+    lock_acquire(&fs_lock);
   off_t bytes_read = inode_read_at (file->inode, buffer, size, file_ofs);
-  lock_release(&fs_lock);
+  if (need_lock)
+    lock_release(&fs_lock);
   return bytes_read;
 }
 
@@ -124,9 +127,12 @@ off_t
 file_write_at (struct file *file, const void *buffer, off_t size,
                off_t file_ofs) 
 {
-  lock_acquire(&fs_lock);
+  bool need_lock = !lock_held_by_current_thread(&fs_lock);
+  if (need_lock)
+    lock_acquire(&fs_lock);
   off_t bytes_written = inode_write_at (file->inode, buffer, size, file_ofs);
-  lock_release(&fs_lock);
+  if (need_lock)
+    lock_release(&fs_lock);
   return bytes_written;
 }
 
