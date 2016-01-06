@@ -166,7 +166,6 @@ frame_get_free() {
 
 void
 frame_set_pin(void *page, bool pin) {
-    printf("0x%08x\n", page);
     // frames MUST always be page aligned
     ASSERT(page != NULL);
     ASSERT(pg_ofs(page) == 0);
