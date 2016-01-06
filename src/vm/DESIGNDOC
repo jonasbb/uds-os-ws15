@@ -1,0 +1,231 @@
+		    +---------------------------+
+		    |             OS            |
+		    | PROJECT 3: VIRTUAL MEMORY |
+		    |      DESIGN DOCUMENT      |
+		    +---------------------------+
+
+---- GROUP ----
+
+>> Fill in the names and email addresses of your group members.
+
+Jonas Bushart <s9jobush@stud.uni-saarland.de>
+Lukas Krämer <lkraemer@mmci.uni-saarland.de>
+
+---- PRELIMINARIES ----
+
+>> If you have any preliminary comments on your submission, notes for the
+>> TAs, or extra credit, please give them here.
+
+>> Please cite any offline or online sources you consulted while
+>> preparing your submission, other than the Pintos documentation, course
+>> text, lecture notes, and course staff.
+Software reverse engineering lecture WS14/15
+
+			PAGE TABLE MANAGEMENT
+			=====================
+
+---- DATA STRUCTURES ----
+
+>> A1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+---- ALGORITHMS ----
+
+>> A2: In a few paragraphs, describe your code for locating the frame,
+>> if any, that contains the data of a given page.
+
+>> A3: How does your code coordinate accessed and dirty bits between
+>> kernel and user virtual addresses that alias a single frame, or
+>> alternatively how do you avoid the issue?
+
+---- SYNCHRONIZATION ----
+
+>> A4: When two user processes both need a new frame at the same time,
+>> how are races avoided?
+
+---- RATIONALE ----
+
+>> A5: Why did you choose the data structure(s) that you did for
+>> representing virtual-to-physical mappings?
+
+		       PAGING TO AND FROM DISK
+		       =======================
+
+---- DATA STRUCTURES ----
+
+>> B1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+---- ALGORITHMS ----
+
+>> B2: When a frame is required but none is free, some frame must be
+>> evicted.  Describe your code for choosing a frame to evict.
+
+>> B3: When a process P obtains a frame that was previously used by a
+>> process Q, how do you adjust the page table (and any other data
+>> structures) to reflect the frame Q no longer has?
+
+>> B4: Explain your heuristic for deciding whether a page fault for an
+>> invalid virtual address should cause the stack to be extended into
+>> the page that faulted.
+The documentation describes that PUSH and PUSHA may fault up to
+32 *below* the stack pointer. In the Software Reverse Engineering lecture
+we learned that the value in ESP *must* be lower or equal to any accesses
+on the stack (for the x86 ABI). Additionally the stack must be limited
+in total size. We combine these rules.
+
+A page fault will extend the stack if it faults no more than 32 byte
+below the stack pointer and the fault address is at most 2MB from
+the top of the stack.
+
+---- SYNCHRONIZATION ----
+
+>> B5: Explain the basics of your VM synchronization design.  In
+>> particular, explain how it prevents deadlock.  (Refer to the
+>> textbook for an explanation of the necessary conditions for
+>> deadlock.)
+
+>> B6: A page fault in process P can cause another process Q's frame
+>> to be evicted.  How do you ensure that Q cannot access or modify
+>> the page during the eviction process?  How do you avoid a race
+>> between P evicting Q's frame and Q faulting the page back in?
+
+>> B7: Suppose a page fault in process P causes a page to be read from
+>> the file system or swap.  How do you ensure that a second process Q
+>> cannot interfere by e.g. attempting to evict the frame while it is
+>> still being read in?
+
+>> B8: Explain how you handle access to paged-out pages that occur
+>> during system calls.  Do you use page faults to bring in pages (as
+>> in user programs), or do you have a mechanism for "locking" frames
+>> into physical memory, or do you use some other design?  How do you
+>> gracefully handle attempted accesses to invalid virtual addresses?
+In the last project we implemented a check-then-access pattern for
+user memory in syscalls. This allowed us to easily extend the `check`
+part to also handle memory.
+While we test whether the user process owns the addresses, which it gave to
+us as parameters, we load all virtual addresses in the user space
+and pin the corresponding frame.
+We have a single function which loads the pages in case of a page fault
+and we reuse it to assert that all pages are loaded, if not already
+present in the page table, and all frames pinned.
+This function notifies us if the loading of a page failed, which means
+it was never before assigned as a valid virtual address for this
+user process. We can then terminate the offending process.
+Afterwards we unpin all frames previously pinned.
+
+---- RATIONALE ----
+
+>> B9: A single lock for the whole VM system would make
+>> synchronization easy, but limit parallelism.  On the other hand,
+>> using many locks complicates synchronization and raises the
+>> possibility for deadlock but allows for high parallelism.  Explain
+>> where your design falls along this continuum and why you chose to
+>> design it this way.
+
+			 MEMORY MAPPED FILES
+			 ===================
+
+---- DATA STRUCTURES ----
+
+>> C1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+---- ALGORITHMS ----
+
+>> C2: Describe how memory mapped files integrate into your virtual
+>> memory subsystem.  Explain how the page fault and eviction
+>> processes differ between swap pages and other pages.
+Our memory subsystem has a hash map for all virtual addresses which
+have another location where the data is stored, the backing store (supplementary page table).
+The backing store can be a file, a zero page or the swap.
+If a page fault occurs for an address where we also have a backing
+location we get all needed information like the file, offset and length
+or the location within the swap which allow us to load the data.
+We can then load the data and map the page as present again in the
+page table for the user process.
+
+The eviction process differs a lot more.
+Any non writable pages will never be written to swap, so we can
+ignore those. All non-writable pages can always be restored from
+the backing file.
+mmaped files will be written to the file. We use the supplementary
+page table to figure out to which part of the file we need to write
+back and then call file_write_at(). We can then reuse the frame.
+For pages which need to be written to the swap device we call a
+method which stores a page onto the device and gives us back an id
+which allows us to get it back. This id is stored to the supplementary
+page table. The writing method for the swap device searches for a
+free space and writes the page in multiple blocks to the device.
+
+>> C3: Explain how you determine whether a new file mapping overlaps
+>> any existing segment.
+Every mapping we create, if it is a file, a segment, stack, mmaps,
+will create a dummy entry in the page table. This dummy address will
+set one of the three bits available for operating system use.
+We use this bit to note all virtual pages which are valid for the
+user process to access.
+If a mapping becomes invalid, especially munmap(), we remove this
+bit for all pages which were mapped before. This keeps the page
+table consistent.
+For a new file mapping we search in the page table all virtual
+addresses which we need to successfully map the new file. If any
+of those addresses is already present in the page table with
+this bit set we cannot map this file as it is too large for this
+virtual address.
+We then indicate an error to the user process.
+
+---- RATIONALE ----
+
+>> C4: Mappings created with "mmap" have similar semantics to those of
+>> data demand-paged from executables, except that "mmap" mappings are
+>> written back to their original files, not to swap.  This implies
+>> that much of their implementation can be shared.  Explain why your
+>> implementation either does or does not share much of the code for
+>> the two situations.
+Our supplementary page table distinguishes between three types of backing
+stores. A backing store is another location where the data of a page may
+be located. This can be a file, the swap or nothing in case the page
+is all zeros.
+Loading from a segment uses both the file and zero backing.
+The file mapping for segments and file mappings for mmaps share the exact
+same implementation in the backing store, with the exeption of an additional
+flag bit only set for mmaped backing to distinguish them later.
+Our implementation always uses the same code path where possible and
+most of the time only has additional code pathes one of the cases.
+For example in frame_evict() we need additional code to handle the writeback
+of mmaped files. Segments which are mapped as not writeable do not need any
+handling at all and writeable segments handle the same as any swap segment
+like stack.
+We chose this way as this allowed us a fast way to implement loading of
+data and it seemed simpler as those code paths are often the same.
+We implemented write back of pages later. More differences are in these
+code paths but since our framework already was present we didn't change it
+to different implementations. We also didn't see a need to do this.
+
+			   SURVEY QUESTIONS
+			   ================
+
+Answering these questions is optional, but it will help us improve the
+course in future quarters.  Feel free to tell us anything you
+want--these questions are just to spur your thoughts.  You may also
+choose to respond anonymously in the course evaluations at the end of
+the quarter.
+
+>> In your opinion, was this assignment, or any one of the three problems
+>> in it, too easy or too hard?  Did it take too long or too little time?
+
+>> Did you find that working on a particular part of the assignment gave
+>> you greater insight into some aspect of OS design?
+
+>> Is there some particular fact or hint we should give students in
+>> future quarters to help them solve the problems?  Conversely, did you
+>> find any of our guidance to be misleading?
+
+>> Do you have any suggestions for the TAs to more effectively assist
+>> students, either for future quarters or the remaining projects?
+
+>> Any other comments?
