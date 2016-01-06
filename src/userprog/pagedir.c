@@ -165,7 +165,7 @@ pagedir_get_page (uint32_t *pd, const void *uaddr)
     return NULL;
 }
 
-/* Marks user virtual page UPAGE "not present" in page
+/* Marks user virtual page UPAGE not assigned and not present
    directory PD.  Later accesses to the page will fault.  Other
    bits in the page table entry are preserved.
    UPAGE need not be mapped. */
@@ -182,10 +182,11 @@ pagedir_clear_page (uint32_t *pd, void *upage)
     {
       // TODO update frame table
       frame_remove(pte_get_page(pte));
-      *pte &= ~PTE_P;
+      *pte &= ~(PTE_P | PTE_ASSIGNED);
       invalidate_pagedir (pd);
     }
 }
+
 /* Returns true if the PTE for virtual page VPAGE in PD is assigned,
    that is the address is a valid address
    Returns false if PD contains no PTE for VPAGE. */

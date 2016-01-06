@@ -105,21 +105,21 @@ spage_valid_and_load(void *vaddr) {
       PANIC("Memory handling wrong!");
     }
     p = frame_get_free();
-    
+
     if (p == NULL) {
             success = false;
             goto done;
     }
-    
+
     switch(e->backing) {
     case SWAPPED:
 
         swap_read(e->st_e, p);
-        e->flags &= ~SPTE_IS_VALID; 
+        e->flags &= ~SPTE_IS_VALID;
         break;
 
     case FROMFILE:
-        
+
         // page may not be fully written to
         memset(p, 0, PGSIZE);
 
@@ -141,7 +141,7 @@ spage_valid_and_load(void *vaddr) {
   if (!install_page(e->vaddr, p, e->flags & SPTE_W)) {
     success = false;
     frame_remove(p);
-  } 
+  }
 
 done:
     log_debug("@@@ spage_valid_and_load return: %s @@@\n",
@@ -199,6 +199,22 @@ spage_map_mmap(struct file *f,
                           writable,
                           size,
                           true);
+}
+
+/* Undoes everything done by spage_map_mmap and evict page holding resources
+ */
+void
+spage_map_munmap(void *uaddr) {
+    struct spage_table_entry ecmp, *e;
+    struct hash_elem *e_;
+    ecmp.vaddr = uaddr;
+    e_ = hash_delete(&thread_current()->sup_pagetable, &ecmp.elem);
+    if (!e_) {
+        return;
+    }
+    e = hash_entry(e_, struct spage_table_entry, elem);
+    pagedir_clear_page(thread_current()->pagedir, e->vaddr);
+    free(e);
 }
 
 /* Maps up to a single page (PGSIZE bytes) of file `f` starting at position
