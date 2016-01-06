@@ -59,6 +59,19 @@ We use a global lock for all vm operations. So races are not even possible.
 >> B1: Copy here the declaration of each new or changed `struct' or
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
+To avoid duplications this only includes entries for the swapping
+subsystem which work in cooperation with the VM subsystem and memory
+mapped files which declarations are listed in A1 and C1 if they fit
+better.
+struct swaptable_entry {
+    block_sector_t swap_sector;
+    void * frame_kaddr;
+};
+; This is used for swap store/load communication.
+; It specifies the frame address and the slot
+; chosen by the algorithm to load the information again.
+
+Further local declarations in swap.c.
 
 ---- ALGORITHMS ----
 
