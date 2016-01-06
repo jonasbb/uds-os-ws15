@@ -316,17 +316,19 @@ syscall_handler (struct intr_frame *f)
   void *vaddr;
 
   uint32_t syscall_nr = *((uint32_t*) uaddr_to_kaddr(f->esp));
-  //printf("SysCall_NR.: %i\n" ,syscall_nr);
   switch (syscall_nr) {
     case SYS_HALT:
+                   log_debug("SYS_HALT\n");
                    syscall_halt();
                    break;                  /* Halt the operating system. */
     case SYS_EXIT:
+                   log_debug("SYS_EXIT\n");
                    status = *((int*) uaddr_to_kaddr(f->esp+4));
                    syscall_exit(status);
                    unpin_page(f->esp+4);
                    break;                  /* Terminate this process. */
     case SYS_EXEC:
+                   log_debug("SYS_EXEC\n");
                    exec_name_uaddr = *((char**) uaddr_to_kaddr(f->esp+4)); /* char pointer in usermode */ 
                    validate_user_string(exec_name_uaddr);
                    exec_name = (char*) uaddr_to_kaddr(exec_name_uaddr); /* char pointer in kernel mode */
@@ -334,11 +336,13 @@ syscall_handler (struct intr_frame *f)
                    unpin_page(f->esp+4);
                    break; /* Start another process. */
     case SYS_WAIT:
+                   log_debug("SYS_WAIT\n");
                    pid = *((int*) uaddr_to_kaddr(f->esp+4));
                    f->eax = syscall_wait(pid);  /* Wait for a child process to die. */
                    unpin_page(f->esp+4);
                    break;
     case SYS_CREATE: 
+                   log_debug("SYS_CREATE\n");
                    file_name_uaddr = *((char**) uaddr_to_kaddr(f->esp+4)); /* char pointer in usermode */ 
                    validate_user_string(file_name_uaddr);
                    file_name = (char*) uaddr_to_kaddr(file_name_uaddr); /* char pointer in kernel mode */
@@ -348,6 +352,7 @@ syscall_handler (struct intr_frame *f)
                    unpin_page(f->esp+8);
                    break;                /* Create a file. */
     case SYS_REMOVE:
+                   log_debug("SYS_REMOVE\n");
                    file_name_uaddr = *((char**) uaddr_to_kaddr(f->esp+4)); /* char pointer in usermode */ 
                    validate_user_string(file_name_uaddr);
                    file_name = (char*) uaddr_to_kaddr(file_name_uaddr); /* char pointer in kernel mode */
@@ -355,17 +360,20 @@ syscall_handler (struct intr_frame *f)
                    unpin_page(f->esp+4);
                    break;                 /* Delete a file. */
     case SYS_OPEN:
+                   log_debug("SYS_OPEN\n");
                    file_name_uaddr = *((char**) uaddr_to_kaddr(f->esp+4)); /* char pointer in usermode */ 
                    validate_user_string(file_name_uaddr);
                    file_name = (char*) uaddr_to_kaddr(file_name_uaddr); /* char pointer in kernel mode */
                    f->eax = syscall_open(file_name);
                    unpin_page(f->esp+4);
                    break;                  /* Open a file. */
-    case SYS_FILESIZE: 
+    case SYS_FILESIZE:
+                   log_debug("SYS_FILESIZE\n");
                    fd = *((int*) uaddr_to_kaddr(f->esp+4));
                    f->eax = syscall_filesize(fd);
                    break;              /* Obtain a file's size. */
     case SYS_READ:
+                   log_debug("SYS_READ\n");
                    fd = *((int*) uaddr_to_kaddr(f->esp+4));
                    buffer_user = *((void**)uaddr_to_kaddr_write(f->esp+8,true)); /* void* in user mode */
                    size = *((unsigned *)uaddr_to_kaddr(f->esp+12));
@@ -379,6 +387,7 @@ syscall_handler (struct intr_frame *f)
                    unpin_buffer(f->esp+8, size);
                    break;    /* Read from a file. */
     case SYS_WRITE:
+                   log_debug("SYS_WRITE\n");
                    fd = *((int*) uaddr_to_kaddr(f->esp+4));
                    buffer_user = *((void**)uaddr_to_kaddr(f->esp+8)); /* void* in user mode */
                    size = *((unsigned *)uaddr_to_kaddr(f->esp+12));
@@ -391,6 +400,7 @@ syscall_handler (struct intr_frame *f)
                    unpin_buffer(f->esp+8, size);
                    break;                  /* Write to a file. */
     case SYS_SEEK:
+                   log_debug("SYS_SEEK\n");
                    fd = *((int*) uaddr_to_kaddr(f->esp+4));
                    position = *((unsigned*) uaddr_to_kaddr(f->esp+8));
                    syscall_seek(fd,position); 
@@ -398,16 +408,19 @@ syscall_handler (struct intr_frame *f)
                    unpin_page(f->esp+8);
                    break;  /* Change position in a file. */
     case SYS_TELL: 
+                   log_debug("SYS_TELL\n");
                    fd = *((int*) uaddr_to_kaddr(f->esp+4));
                    f->eax = syscall_tell(fd);
                    unpin_page(f->esp+4);
                    break;                  /* Report current position in a file. */
     case SYS_CLOSE:
+                   log_debug("SYS_CLOSE\n");
                    fd = *((int*) uaddr_to_kaddr(f->esp+4));
                    syscall_close(fd); 
                    unpin_page(f->esp+4);
                    break;                  /* Close a file. */
     case SYS_MMAP:
+                   log_debug("SYS_MMAP\n");
                    fd = *((int*) uaddr_to_kaddr(f->esp+4));
                    vaddr = *((void**) uaddr_to_kaddr(f->esp+8));
                    f->eax = syscall_mmap(fd,vaddr);
@@ -415,6 +428,7 @@ syscall_handler (struct intr_frame *f)
                    unpin_page(f->esp+8);
                    break;
     case SYS_MUNMAP:
+                   log_debug("SYS_MUNMAP\n");
                    mapid = *((int*) uaddr_to_kaddr(f->esp+4));
                    syscall_munmap(mapid);
                    unpin_page(f->esp+4);
