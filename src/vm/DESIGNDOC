@@ -38,11 +38,13 @@ Software reverse engineering lecture WS14/15
 >> A3: How does your code coordinate accessed and dirty bits between
 >> kernel and user virtual addresses that alias a single frame, or
 >> alternatively how do you avoid the issue?
+We avoid the issue by only accessing the frame via the user virtual address.
 
 ---- SYNCHRONIZATION ----
 
 >> A4: When two user processes both need a new frame at the same time,
 >> how are races avoided?
+We use a global lock for all vm operations. So races are not even possible.
 
 ---- RATIONALE ----
 
