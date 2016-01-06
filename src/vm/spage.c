@@ -63,6 +63,10 @@ spage_destroy() {
       e = hash_entry(e_, struct spage_table_entry, elem);
       switch (e->backing) {
       case SWAPPED:
+        // Free swap from entry
+        ASSERT(e->st_e !=NULL);
+        swap_remove(e->st_e);
+        break;
       case ZEROPAGE:
         // discard, nothing to do
         break;
