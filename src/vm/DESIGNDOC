@@ -165,6 +165,25 @@ We then indicate an error to the user process.
 >> that much of their implementation can be shared.  Explain why your
 >> implementation either does or does not share much of the code for
 >> the two situations.
+Our supplementary page table distinguishes between three types of backing
+stores. A backing store is another location where the data of a page may
+be located. This can be a file, the swap or nothing in case the page
+is all zeros.
+Loading from a segment uses both the file and zero backing.
+The file mapping for segments and file mappings for mmaps share the exact
+same implementation in the backing store, with the exeption of an additional
+flag bit only set for mmaped backing to distinguish them later.
+Our implementation always uses the same code path where possible and
+most of the time only has additional code pathes one of the cases.
+For example in frame_evict() we need additional code to handle the writeback
+of mmaped files. Segments which are mapped as not writeable do not need any
+handling at all and writeable segments handle the same as any swap segment
+like stack.
+We chose this way as this allowed us a fast way to implement loading of
+data and it seemed simpler as those code paths are often the same.
+We implemented write back of pages later. More differences are in these
+code paths but since our framework already was present we didn't change it
+to different implementations. We also didn't see a need to do this.
 
 			   SURVEY QUESTIONS
 			   ================
