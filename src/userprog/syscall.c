@@ -389,7 +389,7 @@ syscall_handler (struct intr_frame *f)
                    unpin_page(f->esp+4);
                    unpin_page(f->esp+8);
                    unpin_page(f->esp+12);
-                   unpin_buffer(f->esp+8, size);
+                   unpin_buffer(buffer_user, size);
                    break;    /* Read from a file. */
     case SYS_WRITE:
                    log_debug("SYS_WRITE\n");
@@ -402,7 +402,7 @@ syscall_handler (struct intr_frame *f)
                    unpin_page(f->esp+4);
                    unpin_page(f->esp+8);
                    unpin_page(f->esp+12);
-                   unpin_buffer(f->esp+8, size);
+                   unpin_buffer(buffer_user, size);
                    break;                  /* Write to a file. */
     case SYS_SEEK:
                    log_debug("SYS_SEEK\n");
@@ -466,7 +466,7 @@ uaddr_to_kaddr_write (const void* uaddr, bool write) {
       }
       void* page = pagedir_get_page(thread_current()->pagedir, uaddr);
       if (page) {
-        frame_set_pin(page, true);
+        frame_set_pin(pg_round_down(page), true);
         return uaddr;
       }
       else {
@@ -488,7 +488,7 @@ error:
 static void
 unpin_page (void* uaddr) {
   void* page = pagedir_get_page(thread_current()->pagedir, uaddr);
-  frame_set_pin(page, false);
+  frame_set_pin(pg_round_down(page), false);
 }
 
 static void
@@ -497,6 +497,7 @@ unpin_buffer (void* uaddr, int size) {
   void* user = uaddr;
   // bytes remaining in page
   unsigned remaining_bytes = PGSIZE - pg_ofs(user);
+  unpin_page(user);
   if (remaining_bytes < size)
   {
     // buffer length is longer than the rest of the page
