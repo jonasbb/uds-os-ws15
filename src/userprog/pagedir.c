@@ -126,8 +126,13 @@ pagedir_set_page_pin (uint32_t *pd, void *upage, void *kpage, bool writable, boo
       frame_insert(kpage, thread_current()->tid, upage, pte);
       return true;
     }
-  else
+  else {
+    // pin already existing page if already present
+    if(pin) {
+      frame_set_pin(pte_get_page(*pte), pin);
+    }
     return false;
+  }
 }
 
 /*

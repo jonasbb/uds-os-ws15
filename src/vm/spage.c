@@ -67,7 +67,7 @@ spage_destroy() {
         break;
       case FROMFILE:
         if (e->flags & SPTE_W && e->flags & SPTE_MMAP) {
-          NOT_REACHED();
+          PANIC("ALL MMAPS MUST BE REMOVED AT PROGRAM EXIT!");
         } else {
           // not writeable, so nothing to write back
         }
@@ -208,14 +208,43 @@ spage_map_munmap(void *uaddr) {
     struct spage_table_entry ecmp, *e;
     struct hash_elem *e_;
     ecmp.vaddr = uaddr;
+
+    // assert page loaded and pinned
+    spage_valid_and_load(uaddr, true);
+    // now we can delete the backing entry
     e_ = hash_delete(&thread_current()->sup_pagetable, &ecmp.elem);
     if (!e_) {
         return;
     }
     e = hash_entry(e_, struct spage_table_entry, elem);
-    // TODO write back to file
+
+    // get physical address
+    void *kpage = pagedir_get_page(thread_current()->pagedir, uaddr);
+    if(pagedir_is_dirty(thread_current()->pagedir, uaddr)) {
+        ASSERT(kpage != NULL);
+
+        // write back to file
+        spage_flush_mmap(e_, kpage);
+    }
+
+    // cleanup
+    frame_set_pin(kpage, false);
+    // remove from address space
     pagedir_clear_page(thread_current()->pagedir, e->vaddr);
     free(e);
+}
+
+void
+spage_flush_mmap(struct spage_table_entry *e,
+                 void                     *kaddr){
+    ASSERT(e->backing == FROMFILE);
+    ASSERT((e->flags & SPTE_MMAP) != 0);
+    ASSERT(is_kernel_vaddr(kaddr));
+
+    file_write_at(e->file,
+                  kaddr,
+                  e->file_size,
+                  e->file_ofs);
 }
 
 /* Maps up to a single page (PGSIZE bytes) of file `f` starting at position
