@@ -11,7 +11,6 @@
 static uint32_t page_to_pagenum(void* page);
 static void* pagenum_to_page(uint32_t pgnum);
 
-// TODO define frame table
 struct frametable {
     // Number of frametable entries in the array
     uint32_t size;
@@ -33,7 +32,6 @@ struct frametable {
     // first page in consecutive memory segment
     // used for page number calculations
     void* base_addr;
-    
 };
 
 struct frametable frametable;
@@ -118,7 +116,7 @@ frame_remove(void *frame_address) {
 
     uint32_t pgnum = page_to_pagenum(frame_address);
     if (frametable.frametable[pgnum].pin != false) {
-        PANIC("Remove of pinned frame!"); 
+        PANIC("Remove of pinned frame!");
     }
     ASSERT(frametable.frametable[pgnum].pin == false);
 
@@ -165,11 +163,6 @@ frame_get_free() {
     } else {
         // no free frames left
         // evict frame
-        
-
-        // TODO crash until eviction implemented
-        //NOT_REACHED();
-        //        && frametable.frametable[frametable.search_ptr].pin == false) {
         void *tmp = frame_evict();
         lock_release_re(&vm_lock);
         return tmp;
@@ -256,7 +249,7 @@ frame_evict() {
                         elem = hash_find(&t->sup_pagetable, &ecmp.elem);
                         if (elem == NULL) {
                             //swap
-                            struct swaptable_entry * st_e = 
+                            struct swaptable_entry * st_e =
                                     create_swaptable_entry(pagenum_to_page(frametable.evict_ptr));
                             swap_add(st_e);
                             spage_map_swap(pg_no_to_addr(
@@ -273,10 +266,8 @@ frame_evict() {
                             else if (!(e->flags & SPTE_MMAP)) {
                                 //file backed writable entry
                                 PANIC("SWAP of page with spage entry!");
-                            
                             }
                         }
-                        
                     }
                     frametable.frametable[frametable.evict_ptr].pte = (void*) 0xFFFFFFFF;
                     void* tmp = pagenum_to_page(frametable.evict_ptr);
