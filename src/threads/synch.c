@@ -178,6 +178,7 @@ lock_init (struct lock *lock)
   ASSERT (lock != NULL);
 
   lock->holder = NULL;
+  lock->cnt = 0;
   sema_init (&lock->semaphore, 1);
 }
 
@@ -198,6 +199,22 @@ lock_acquire (struct lock *lock)
 
   sema_down (&lock->semaphore);
   lock->holder = thread_current ();
+}
+
+void
+lock_acquire_re (struct lock *lock)
+{
+  ASSERT (lock != NULL);
+  ASSERT (!intr_context ());
+  if (lock_held_by_current_thread (lock)) {
+      lock->cnt++;
+      return;
+  }
+
+  sema_down (&lock->semaphore);
+  lock->holder = thread_current ();
+  lock->cnt++;
+  ASSERT(lock->cnt == 1);
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -231,6 +248,19 @@ lock_release (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
+  lock->holder = NULL;
+  sema_up (&lock->semaphore);
+}
+
+void
+lock_release_re (struct lock *lock) 
+{
+  ASSERT (lock != NULL);
+  ASSERT (lock_held_by_current_thread (lock));
+  ASSERT (lock->cnt > 0);
+  lock->cnt--;
+  if (lock->cnt!= 0) 
+      return;
   lock->holder = NULL;
   sema_up (&lock->semaphore);
 }
