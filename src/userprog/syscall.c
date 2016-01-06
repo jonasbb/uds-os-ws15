@@ -17,6 +17,7 @@
 #include "userprog/syscall.h"
 #include "lib/user/syscall.h"
 #include "lib/round.h"
+#include "vm/spage.h"
 
 static void syscall_handler (struct intr_frame *);
 static void validate_user_string (char* user_str);
@@ -386,8 +387,8 @@ syscall_handler (struct intr_frame *f)
                    break;                  /* Close a file. */
     case SYS_MMAP:
                    fd = *((int*) uaddr_to_kaddr(f->esp+4));
-                   vaddr = *((unsigned*) uaddr_to_kaddr(f->esp+8));
-                   syscall_mmap(fd,vaddr);
+                   vaddr = *((void**) uaddr_to_kaddr(f->esp+8));
+                   f->eax = syscall_mmap(fd,vaddr);
                    break;
     case SYS_MUNMAP:
                    fd = *((int*) uaddr_to_kaddr(f->esp+4));

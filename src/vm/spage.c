@@ -213,6 +213,7 @@ spage_map_munmap(void *uaddr) {
         return;
     }
     e = hash_entry(e_, struct spage_table_entry, elem);
+    // TODO write back to file
     pagedir_clear_page(thread_current()->pagedir, e->vaddr);
     free(e);
 }
