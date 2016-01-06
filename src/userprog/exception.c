@@ -8,6 +8,7 @@
 #include "threads/vaddr.h"
 #include "userprog/process.h"
 #include "vm/spage.h"
+#include "vm/frames.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -152,6 +153,17 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
   
+  // Get esp 
+  void *esp;
+  if (f->cs == SEL_KCSEG) {
+    // If kernel interrupts take esp from thread
+    esp = thread_current()->stack;
+  }
+  else {
+    // Otherwise from interupt frame
+    esp = f->esp;
+  }
+  
   // handle user page faults by killing the process
   if (user)
   {
@@ -159,6 +171,16 @@ page_fault (struct intr_frame *f)
         // check if access is valid anyway and map page if so
         bool tmp = spage_valid_and_load(pg_round_down(fault_addr), false);
         if (!tmp) {
+            if (is_valid_stack_address(fault_addr, esp)) {
+              void *p = frame_get_free();
+              if (p == NULL) {
+                goto error;
+              }
+              if (!install_page(pg_round_down(fault_addr), p, true, false)) {
+                goto error;
+              }
+              return;
+            }
             // access to invalid address
             log_debug ("Handled page fault:\n");
             log_debug ("Page fault at %p: %s error %s page in %s context.\n",
@@ -180,6 +202,7 @@ page_fault (struct intr_frame *f)
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to
      which fault_addr refers. */
+error:
   printf ("Page fault at %p: %s error %s page in %s context.\n",
           fault_addr,
           not_present ? "not present" : "rights violation",

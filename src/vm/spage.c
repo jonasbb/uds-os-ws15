@@ -5,10 +5,11 @@
 #include "userprog/pagedir.h"
 #include "threads/malloc.h"
 #include "threads/thread.h"
+#include "threads/vaddr.h"
 #include "vm/frames.h"
 #include "vm/swap.h"
 
-static bool install_page (void *upage, void *kpage, bool writable, bool pin);
+
 static bool install_not_present_page (void *upage);
 static bool spage_map_file(struct file *f,
                            size_t       ofs,
@@ -272,7 +273,7 @@ spage_map_zero(void *uaddr,
    with palloc_get_page().
    Returns true on success, false if UPAGE is already mapped or
    if memory allocation fails. */
-static bool
+bool
 install_page (void *upage, void *kpage, bool writeable, bool pin)
 {
   struct thread *t = thread_current ();
@@ -291,4 +292,9 @@ install_not_present_page (void *upage) {
      address, then map our page there. */
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page_not_present (t->pagedir, upage));
+}
+
+bool
+is_valid_stack_address(void * addr, void * esp) {
+  return (addr < PHYS_BASE - PGSIZE) && (addr + 32 >= esp) && addr > STACK_MAX;
 }

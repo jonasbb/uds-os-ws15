@@ -336,3 +336,14 @@ invalidate_pagedir (uint32_t *pd)
       pagedir_activate (pd);
     } 
 }
+
+
+/* Returns true if the PTE for virtual page VPAGE in PD is writeable,
+   that is, if the page is not mapped, only the PTE is present.
+   Returns false if PD contains no PTE for VPAGE. */
+bool
+pagedir_is_writeable (uint32_t *pd, const void *vpage)
+{
+  uint32_t *pte = lookup_page (pd, vpage, false);
+  return pte != NULL && (*pte & PTE_W) != 0;
+}

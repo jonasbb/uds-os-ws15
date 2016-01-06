@@ -13,6 +13,7 @@ void pagedir_clear_page (uint32_t *pd, void *upage);
 bool pagedir_set_page_not_present(uint32_t *pd, void *upage);
 bool pagedir_is_assigned(uint32_t *pd, const void *upage);
 bool pagedir_is_present (uint32_t *pd, const void *vpage);
+bool pagedir_is_writeable (uint32_t *pd, const void *vpage);
 void pagedir_set_not_present (uint32_t *pd, const void *vpage);
 bool pagedir_is_dirty (uint32_t *pd, const void *upage);
 void pagedir_set_dirty (uint32_t *pd, const void *upage, bool dirty);

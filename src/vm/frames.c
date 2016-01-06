@@ -105,6 +105,10 @@ frame_remove(void *frame_address) {
     ASSERT(pg_ofs(frame_address) == 0);
 
     uint32_t pgnum = page_to_pagenum(frame_address);
+    if (frametable.frametable[pgnum].pin != false) {
+        log_debug("Remove of pinned frame!!!\n");
+        return; // DEBUG as long as unpinning is not implemented   
+    }
     ASSERT(frametable.frametable[pgnum].pin == false);
 
     // TODO reset everything

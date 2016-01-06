@@ -6,6 +6,7 @@
 #include "devices/block.h"
 #include "filesys/file.h"
 
+#define STACK_MAX ((void *) PHYS_BASE - 512 * PGSIZE) 
 
 enum spte_backing {
     SWAPPED  = 0,
@@ -68,4 +69,8 @@ bool spage_map_segment(struct file *f,
                        size_t       size);
 bool spage_map_zero(void *uaddr,
                     const bool writeable);
+                    
+bool is_valid_stack_address(void * addr, void * esp);
+
+bool install_page (void *upage, void *kpage, bool writable, bool pin);
 #endif
