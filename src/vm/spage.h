@@ -72,5 +72,8 @@ bool spage_map_segment(struct file *f,
 bool spage_map_zero(void *uaddr,
                     const bool writeable);
 
+bool spage_map_swap(void *uaddr,
+               struct swaptable_entry * st_e);
+
 bool install_page (void *upage, void *kpage, bool writable, bool pin);
 #endif

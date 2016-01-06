@@ -1,8 +1,11 @@
 #include "vm/frames.h"
+#include "vm/spage.h"
 #include <debug.h>
 #include <round.h>
 #include "threads/malloc.h"
 #include "threads/vaddr.h"
+#include "userprog/pagedir.h"
+
 
 static uint32_t page_to_pagenum(void* page);
 static void* pagenum_to_page(uint32_t pgnum);
@@ -225,9 +228,32 @@ frame_evict() {
                                         pg_no_to_addr(frametable.frametable[frametable.evict_ptr].virt_address), false);
                         continue;
                     }
-                    
+                        
                     if (old_pte->writable) {
-                        printf("Got writable frame for eviction");
+                        struct spage_table_entry ecmp, *e;
+                        struct hash_elem *elem;
+                        ecmp.vaddr = pg_round_down(frametable.frametable[frametable.evict_ptr].virt_address);
+                        elem = hash_find(&t->sup_pagetable, &ecmp.elem);
+                        if (elem == NULL) {
+                            //swap
+                            struct swaptable_entry * st_e = create_swaptable_entry(frametable.frametable[frametable.evict_ptr]);
+                            swap_add(st_e);
+                            spage_map_swap(frametable.frametable[frametable.evict_ptr].virt_address, st_e);
+                            
+                        }
+                        e = hash_entry(elem, struct spage_table_entry, elem);
+                        
+                        if (e->flags & SPTE_MMAP && old_pte->dirty) {
+                            //flush
+                            spage_flush_mmap(e, pagenum_to_page(frametable.evict_ptr));
+                            //reset dirty bit
+                            pagedir_set_dirty(t->pagedir, e->vaddr, false);
+                        }
+                        else if (!(e->flags & SPTE_MMAP)) {
+                            //swap
+                            PANIC("SWAP of page with spage entry!");
+                            
+                        }
                     }
                     
                     pagedir_set_not_present(t->pagedir, 

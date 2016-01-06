@@ -144,6 +144,7 @@ spage_valid_and_load(void *vaddr, bool pin, void *esp) {
             success = false;
             frame_remove(p);
         }
+        pagedir_set_dirty(t->pagedir, e->vaddr, false);
         hash_delete(&t->sup_pagetable,e);
         free(e);
         break;
@@ -160,6 +161,7 @@ spage_valid_and_load(void *vaddr, bool pin, void *esp) {
             success = false;
             frame_remove(p);
         }
+        pagedir_set_dirty(t->pagedir, e->vaddr, false);
         break;
 
     case ZEROPAGE:;
@@ -169,6 +171,7 @@ spage_valid_and_load(void *vaddr, bool pin, void *esp) {
             success = false;
             frame_remove(p);
         }
+        pagedir_set_dirty(t->pagedir, e->vaddr, false);        
         hash_delete(&t->sup_pagetable,e);
         free(e);
         break;
@@ -361,4 +364,27 @@ install_not_present_page (void *upage) {
 static bool
 is_valid_stack_address(void * addr, void * esp) {
   return (addr < PHYS_BASE - PGSIZE) && (addr + 32 >= esp) && addr > STACK_MAX;
+}
+
+
+/* Maps a single page (PGSIZE bytes) of 0's into the address space at position
+ * `uaddr`. If `writable` the page will be writeable.
+ * `uaddr` MUST point to a page, offset = 0.
+ */
+bool
+spage_map_swap(void *uaddr,
+               struct swaptable_entry * st_e) {
+    ASSERT(pg_ofs(uaddr) == 0);
+
+    struct spage_table_entry *e = malloc(sizeof (*e));
+    e->vaddr = uaddr;
+    e->backing = SWAPPED;
+    e->flags = SPTE_IS_VALID;
+    e->flags |= SPTE_W;
+    e->st_e = st_e;
+
+    // insert w/o replace
+    // NULL if insert successful
+    return install_not_present_page(uaddr)
+                 && hash_insert(&thread_current()->sup_pagetable, &e->elem) == NULL;
 }
