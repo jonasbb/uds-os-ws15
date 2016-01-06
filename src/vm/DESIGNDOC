@@ -133,6 +133,35 @@ Afterwards we unpin all frames previously pinned.
 >> C1: Copy here the declaration of each new or changed `struct' or
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
+Many/Most of the entries in B1 also apply to this answer, as memory mapped files
+are just one special case of our VM system.
+Therefore, only definitions ONLY applying to mapped files are listed here, to avoid
+duplications.
+
+typedef int mapid_t;
+; redeclaration of mapid
+
+struct mmapdata {
+  mapid_t mapid;
+  void *base_addr;
+  size_t pgcount;
+  struct file *file;
+};
+; storage of a list of all mmaps in process.c and communication with
+; syscalls
+
+in struct process_state_item:
+// mmaped files
+int nextmapid;
+struct list mmaplist;
+; management of mapped files per process
+
+struct mmaplist_item
+{
+  struct list_elem elem;
+  struct mmapdata data;
+};
+; list item for above list
 
 ---- ALGORITHMS ----
 
