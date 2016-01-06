@@ -462,7 +462,7 @@ uaddr_to_kaddr_write (const void* uaddr, bool write) {
       void* page = pagedir_get_page(thread_current()->pagedir, uaddr);
       if (page) {
         frame_set_pin(page, true);
-        return page;
+        return uaddr;
       }
       else {
         if (spage_valid_and_load(uaddr, true)) {
