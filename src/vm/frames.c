@@ -151,9 +151,10 @@ frame_get_free() {
     } else {
         // no free frames left
         // evict frame
+        
 
         // TODO crash until eviction implemented
-        NOT_REACHED();
+        //NOT_REACHED();
         //        && frametable.frametable[frametable.search_ptr].pin == false) {
         return frame_evict();
     }
@@ -205,3 +206,36 @@ frametable_entry_create(struct frametable_entry* fte,
     fte->pin = pin;
 }
 
+
+void *
+frame_evict() {
+    while(1) {
+            if (frametable.frametable[frametable.evict_ptr].pin == false &&
+                frametable.frametable[frametable.evict_ptr].pte != (void*) 0xFFFFFFFF) {
+                    struct pagetable_entry* old_pte = frametable.frametable[frametable.evict_ptr].pte;
+                    struct thread *t = thread_from_tid(frametable.frametable[frametable.evict_ptr].tid);
+                    if (old_pte->accessed) {
+                        pagedir_set_accessed(t->pagedir, 
+                                        pg_no_to_addr(frametable.frametable[frametable.evict_ptr].virt_address), false);
+                        continue;
+                    }
+                    
+                    if (old_pte->writable) {
+                        printf("Got writable frame for eviction");
+                    }
+                    
+                    pagedir_set_not_present(t->pagedir, 
+                                    pg_no_to_addr(frametable.frametable[frametable.evict_ptr].virt_address));
+                    ;
+                    frametable.frametable[frametable.evict_ptr].pte = (void*) 0xFFFFFFFF;
+                    void* tmp = pagenum_to_page(frametable.evict_ptr);
+                    log_debug("### Evict page at 0x%08x ###\n", (uint32_t) tmp);
+                    frametable.evict_ptr = (frametable.evict_ptr + 1) % frametable.size;
+                                                  
+                    return tmp;
+            }
+                        // jump to next position
+            frametable.evict_ptr = (frametable.evict_ptr + 1) % frametable.size;
+       }
+
+}

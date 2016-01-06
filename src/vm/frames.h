@@ -38,5 +38,6 @@ void frame_remove_mult(void *frame_address,
                        size_t cnt);
 void* frame_get_free(void);
 void frame_set_pin(void *page, bool pin);
+void* frame_evict(void);
 
 #endif
