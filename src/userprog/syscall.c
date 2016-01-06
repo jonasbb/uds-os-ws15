@@ -389,7 +389,7 @@ syscall_handler (struct intr_frame *f)
                    fd = *((int*) uaddr_to_kaddr(f->esp+4, esp));
                    buffer_user = *((void**)uaddr_to_kaddr(f->esp+8 ,esp)); /* void* in user mode */
                    size = *((unsigned *)uaddr_to_kaddr(f->esp+12, esp));
-                   validate_user_buffer_write(buffer_user, size, esp, true); /* validates user input */                        
+                   validate_user_buffer_write(buffer_user, size, esp, true); /* validates user input */                    
                    f->eax = syscall_read(fd, buffer_user, size);
                    // unpinning
                    unpin_page(f->esp+4);
@@ -463,6 +463,8 @@ uaddr_to_kaddr_write (const void* uaddr, bool write, void *esp) {
   }
   // TODO Lock needed?
   if (is_user_vaddr(uaddr)){
+    // done to handle stack growth
+    spage_valid_and_load(uaddr, true, esp);
     if (pagedir_is_assigned(thread_current()->pagedir, uaddr)) {
       if (write) {
         if (!pagedir_is_writeable(thread_current()->pagedir, uaddr)) {
@@ -475,12 +477,13 @@ uaddr_to_kaddr_write (const void* uaddr, bool write, void *esp) {
         return uaddr;
       }
       else {
-        if (spage_valid_and_load(uaddr, true, esp)) {
-          return pagedir_get_page(thread_current()->pagedir, uaddr); 
-       }
+        // first spage_valid.. should cover this
+        NOT_REACHED(); 
+       
       }
     }
     else {
+      log_debug("Error\n");
       goto error;
     }
   }
