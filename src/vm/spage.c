@@ -252,8 +252,6 @@ spage_map_munmap(void *uaddr) {
     struct hash_elem *e_;
     ecmp.vaddr = uaddr;
 
-    // assert page loaded and pinned
-    spage_valid_and_load(uaddr, true, PHYS_BASE);
     // now we can delete the backing entry
     e_ = hash_delete(&thread_current()->sup_pagetable, &ecmp.elem);
     if (!e_) {
@@ -261,9 +259,13 @@ spage_map_munmap(void *uaddr) {
     }
     e = hash_entry(e_, struct spage_table_entry, elem);
 
-    // get physical address
-    void *kpage = pagedir_get_page(thread_current()->pagedir, uaddr);
+    void * kpage = NULL;
     if(pagedir_is_dirty(thread_current()->pagedir, uaddr)) {
+
+    // assert page loaded and pinned
+    spage_valid_and_load(uaddr, true, PHYS_BASE);
+    // get physical address
+    kpage = pagedir_get_page(thread_current()->pagedir, uaddr);
         ASSERT(kpage != NULL);
 
         // write back to file
@@ -271,7 +273,9 @@ spage_map_munmap(void *uaddr) {
     }
 
     // cleanup
-    frame_set_pin(kpage, false);
+    if (kpage != NULL) {
+        frame_set_pin(kpage, false);
+    }
     // remove from address space
     pagedir_clear_page(thread_current()->pagedir, e->vaddr);
     free(e);
