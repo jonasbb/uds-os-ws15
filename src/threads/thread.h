@@ -100,9 +100,7 @@ struct thread
     uint32_t *pagedir;                  /* Page directory. */
 #endif
 
-#ifdef VM
     struct hash sup_pagetable;
-#endif
 
     // process id which this thread belongs to
     pid_t pid;
