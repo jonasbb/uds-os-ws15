@@ -217,6 +217,18 @@ lock_acquire_re (struct lock *lock)
   ASSERT(lock->cnt == 1);
 }
 
+void
+lock_acquire_re_mult (struct lock *lock, int cnt)
+{
+  ASSERT (lock != NULL);
+  ASSERT (!intr_context ());
+  ASSERT (!lock_held_by_current_thread (lock));
+
+  sema_down (&lock->semaphore);
+  lock->holder = thread_current ();
+  lock->cnt = cnt;
+}
+
 /* Tries to acquires LOCK and returns true if successful or false
    on failure.  The lock must not already be held by the current
    thread.
@@ -263,6 +275,22 @@ lock_release_re (struct lock *lock)
       return;
   lock->holder = NULL;
   sema_up (&lock->semaphore);
+}
+
+/* Releases reentrant lock and returns how often it was held
+ */
+int
+lock_release_re_mult (struct lock *lock)
+{
+  ASSERT (lock != NULL);
+  ASSERT (lock_held_by_current_thread (lock));
+  ASSERT (lock->cnt > 0);
+
+  int res = lock->cnt;
+  lock->cnt = 0;
+  lock->holder = NULL;
+  sema_up (&lock->semaphore);
+  return res;
 }
 
 /* Returns true if the current thread holds LOCK, false

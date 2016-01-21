@@ -27,8 +27,12 @@ struct lock
 
 void lock_init (struct lock *);
 void lock_acquire (struct lock *);
+void lock_acquire_re (struct lock *lock);
+void lock_acquire_re_mult (struct lock *lock, int cnt);
 bool lock_try_acquire (struct lock *);
 void lock_release (struct lock *);
+void lock_release_re (struct lock *lock);
+int  lock_release_re_mult (struct lock *lock);
 bool lock_held_by_current_thread (const struct lock *);
 
 /* Condition variable. */
