@@ -235,9 +235,9 @@ struct inode *
 inode_reopen (struct inode *inode)
 {
   if (inode != NULL) {
-    lock_acquire(inode->lock);
+    lock_acquire(&inode->lock);
     inode->open_cnt++;
-    lock_release(inode->lock);
+    lock_release(&inode->lock);
   }
   return inode;
 }
@@ -390,7 +390,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 
       in_cache_and_overwrite_block (sector_idx,
                                     sector_ofs,
-                                    buffer + bytes_read,
+                                    buffer + bytes_written,
                                     chunk_size);
 
       /* Advance. */
