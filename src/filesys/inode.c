@@ -76,12 +76,8 @@ byte_to_sector (struct inode *inode, off_t pos)
 static block_sector_t
 byte_to_sector_expand (struct inode *inode, off_t pos)
 {
-<<<<<<< cb3a2c061ee1c8fd1279948751b172ef318e19e1
   log_debug("!!!byte_to_sector_expand!!!\n");
-  block_sector_t sector;
-=======
   block_sector_t tmp, sector;
->>>>>>> (more) correctly expand files on write
   ASSERT (inode != NULL);
 
   in_cache_and_read(inode->start,
