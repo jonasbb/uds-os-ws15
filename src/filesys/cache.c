@@ -148,10 +148,10 @@ void sched_background(void *aux UNUSED) {
 
         for (e = list_begin(&sched_outstanding_requests);
              e != list_end(&sched_outstanding_requests);
-             e = list_next(e)) {
-
+             ) {
             r = list_entry (e, struct request_item, elem);
-            list_remove(e);
+            e = list_next(e);
+            list_remove(&r->elem);
             int cnt = lock_release_re_mult(&sched_lock);
             // perform block operation
             if (r->read) {
@@ -174,8 +174,7 @@ void sched_background(void *aux UNUSED) {
             // mark cache as reusable again
             unpin(r->idx);
             lock_acquire_re_mult(&sched_lock, cnt);
-            free(e);
-            e = NULL;
+            free(r);
             r = NULL;
         }
         if (!list_empty(&sched_outstanding_requests)) {
@@ -210,7 +209,9 @@ cache_t sched_read_do(block_sector_t sector,
     if ((res = sched_contains_req(sector, true)) == NULL) {
         res = sched_insert(sector, NOT_IN_CACHE);
     }
-    if (!isprefetch && sched_contains_req(sector+1, true) == NULL) {
+    if (!isprefetch && sched_contains_req(sector+1, true) == NULL
+            && sector < block_size(fs_device)) // check for out of bound accesses
+            {
         sched_insert(sector+1, NOT_IN_CACHE);
     }
     cache_t r = res->idx;
@@ -245,6 +246,8 @@ void sched_read_sync(block_sector_t sector) {
 static
 void sched_write(block_sector_t sector,
                  cache_t        idx) {
+    ASSERT(sector < block_size(fs_device));
+
     lock_acquire_re(&sched_lock);
     if (sched_contains_req(sector, false) == NULL) {
         sched_insert(sector, idx);
@@ -400,6 +403,7 @@ void zero_out_sector_data(block_sector_t sector) {
 
 static
 cache_t get_and_lock_sector_data(block_sector_t sector) {
+    ASSERT(sector < block_size(fs_device));
     // return locked block with data from sector
     // if not already in cache load into cache
 
@@ -470,6 +474,7 @@ void in_cache_and_overwrite_block(block_sector_t  sector,
                               size_t          ofs,
                               void           *data,
                               size_t          length) {
+    ASSERT(sector < block_size(fs_device));
     ASSERT(ofs + length <= BLOCK_SECTOR_SIZE);
 
     if (length == 0) {
@@ -492,6 +497,7 @@ void in_cache_and_read(block_sector_t  sector,
                        void           *data,
                        size_t          length) {
     ASSERT(ofs + length <= BLOCK_SECTOR_SIZE);
+    ASSERT(sector < block_size(fs_device));
 
     if (length == 0) {
         return;
