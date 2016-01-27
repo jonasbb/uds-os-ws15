@@ -6,6 +6,7 @@
 #include "filesys/filesys.h"
 #include "filesys/free-map.h"
 #include "threads/malloc.h"
+#include "filesys/cache.h"
 
 /* Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
@@ -54,7 +55,7 @@ struct inode
    Returns -1 if INODE does not contain data for a byte at offset
    POS. */
 static block_sector_t
-byte_to_sector (const struct inode *inode, off_t pos) 
+byte_to_sector (struct inode *inode, off_t pos)
 {
   block_sector_t sector;
   ASSERT (inode != NULL);
@@ -72,7 +73,7 @@ byte_to_sector (const struct inode *inode, off_t pos)
 }
 
 static block_sector_t
-byte_to_sector_expand (const struct inode *inode, off_t pos)
+byte_to_sector_expand (struct inode *inode, off_t pos)
 {
   block_sector_t sector;
   ASSERT (inode != NULL);
@@ -93,7 +94,7 @@ byte_to_sector_expand (const struct inode *inode, off_t pos)
       lock_release(&inode->lock);
       goto step2;
     }
-    if (!free_map_allocate(1,sector)){
+    if (!free_map_allocate(1, &sector)){
       lock_release(&inode->lock);
       return NON_EXISTANT;
     }
@@ -125,7 +126,7 @@ step2:
       lock_release(&inode->lock);
       goto end;
     }
-    if (!free_map_allocate(1,sector)) {
+    if (!free_map_allocate(1,&sector)) {
       lock_release(&inode->lock);
       return NON_EXISTANT;
     }
@@ -225,7 +226,7 @@ inode_open (block_sector_t sector)
   lock_init(&(inode->lock));
   in_cache_and_overwrite_block(inode->sector,
                                offsetof(struct inode_disk,start),
-                               offsetof(struct inode,start),
+                               inode + offsetof(struct inode,start),
                                offsetof(struct inode_disk,unused2));
   return inode;
 }
@@ -244,7 +245,7 @@ inode_reopen (struct inode *inode)
 
 /* Returns INODE's inode number. */
 block_sector_t
-inode_get_inumber (const struct inode *inode)
+inode_get_inumber (struct inode *inode)
 {
   lock_acquire(&inode->lock);
   block_sector_t tmp = inode->sector;
@@ -358,10 +359,10 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
    (Normally a write at end of file would extend the inode, but
    growth is not yet implemented.) */
 off_t
-inode_write_at (struct inode *inode, const void *buffer_, off_t size,
+inode_write_at (struct inode *inode, void *buffer_, off_t size,
                 off_t offset) 
 {
-  const uint8_t *buffer = buffer_;
+  uint8_t *buffer = buffer_;
   off_t bytes_written = 0;
   off_t o_offset = offset;
 
@@ -433,7 +434,7 @@ inode_allow_write (struct inode *inode)
 
 /* Returns the length, in bytes, of INODE's data. */
 off_t
-inode_length (const struct inode *inode)
+inode_length (struct inode *inode)
 {
   lock_acquire(&inode->lock);
   off_t tmp = inode->length;
