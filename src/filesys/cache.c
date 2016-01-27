@@ -148,10 +148,10 @@ void sched_background(void *aux UNUSED) {
 
         for (e = list_begin(&sched_outstanding_requests);
              e != list_end(&sched_outstanding_requests);
-             e = list_next(e)) {
-
+             ) {
             r = list_entry (e, struct request_item, elem);
-            list_remove(e);
+            e = list_next(e);
+            list_remove(&r->elem);
             int cnt = lock_release_re_mult(&sched_lock);
             // perform block operation
             if (r->read) {
@@ -174,8 +174,7 @@ void sched_background(void *aux UNUSED) {
             // mark cache as reusable again
             unpin(r->idx);
             lock_acquire_re_mult(&sched_lock, cnt);
-            free(e);
-            e = NULL;
+            free(r);
             r = NULL;
         }
         if (!list_empty(&sched_outstanding_requests)) {
