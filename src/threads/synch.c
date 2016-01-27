@@ -249,6 +249,33 @@ lock_try_acquire (struct lock *lock)
   return success;
 }
 
+/* Tries to acquires LOCK and returns true if successful or false
+   on failure.  The lock must not already be held by the current
+   thread.
+
+   This function will not sleep, so it may be called within an
+   interrupt handler. */
+bool
+lock_try_acquire_re (struct lock *lock)
+{
+  bool success;
+
+  ASSERT (lock != NULL);
+
+  if (lock_held_by_current_thread (lock)) {
+      lock->cnt++;
+      return true;
+  }
+
+  success = sema_try_down (&lock->semaphore);
+  if (success) {
+    lock->holder = thread_current ();
+    lock->cnt++;
+    ASSERT(lock->cnt == 1);
+  }
+  return success;
+}
+
 /* Releases LOCK, which must be owned by the current thread.
 
    An interrupt handler cannot acquire a lock, so it does not
