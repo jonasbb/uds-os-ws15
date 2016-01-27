@@ -98,7 +98,7 @@ byte_to_sector_expand (const struct inode *inode, off_t pos)
       return NON_EXISTANT;
     }
 
-    cache_set_zero(sector); //TODO
+    zero_out_sector_data(sector); //TODO
     in_cache_and_overwrite_block(inode->start,
                     (pos/(128*BLOCK_SECTOR_SIZE))*sizeof(block_sector_t),
                     &sector,
@@ -129,7 +129,7 @@ step2:
       lock_release(&inode->lock);
       return NON_EXISTANT;
     }
-    cache_set_zero(sector); //TODO
+    zero_out_sector_data(sector); //TODO
     in_cache_and_overwrite_block(inode->start,
                     (pos%(128*BLOCK_SECTOR_SIZE))*sizeof(block_sector_t)/BLOCK_SECTOR_SIZE,
                     &sector,
@@ -177,7 +177,7 @@ inode_create (block_sector_t sector, off_t length, bool is_dir)
       if (free_map_allocate (1, &disk_inode->start))
         {
           in_cache_and_overwrite_block (sector, 0, disk_inode, sizeof(*disk_inode));
-          cache_set_zero(disk_inode->start);
+          zero_out_sector_data(disk_inode->start);
           success = true;
         }
       free (disk_inode);
