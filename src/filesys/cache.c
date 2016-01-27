@@ -11,6 +11,8 @@
 
 // TODO DEBUG
 const bool print_hex = false;
+const bool print_debug = false;
+const bool print_cache_state = false;
 
 // static functions
 static cache_t get_and_lock_sector_data(block_sector_t sector);
@@ -184,8 +186,10 @@ void sched_background(void *aux UNUSED) {
             continue;
         }
 
+        log_debug(":S: BLCK_WRTR is going to sleep... :S:\n");
         // wait until there is something to do
         cond_wait(&sched_new_requests_cond, &sched_lock);
+        log_debug(":S: BLCK_WRTR was woken up :S:\n");
     }
 }
 
@@ -253,6 +257,7 @@ struct request_item *sched_insert(block_sector_t sector,
                         &r->elem,
                         request_item_less_func,
                         NULL);
+    log_debug(":S: Broadcast to thread :S:\n");
     cond_broadcast(&sched_new_requests_cond, &sched_lock);
     lock_release_re(&sched_lock);
     return r;
@@ -320,9 +325,15 @@ cache_t get_and_pin_block (block_sector_t sector) {
         if (lock_try_acquire_re(&blocks_meta[ptr].lock)) {
             if ((blocks_meta[ptr].state & PIN) != 0
                     || blocks_meta[ptr].refs > 0) {
+                if (print_cache_state) {
+                    log_debug("=|= %d is PINNED, refs %d =|=\n", ptr, blocks_meta[ptr].refs);
+                }
                 // pinned page, may not do anything about it
                 goto cont;
             } else if ((blocks_meta[ptr].state & DIRTY) == DIRTY) {
+                if (print_cache_state) {
+                    log_debug("=|= %d is scheduled for write =|=\n", ptr);
+                }
                 // dirty, shedule write
 
                 // pin page so that we may release the lock
@@ -331,11 +342,17 @@ cache_t get_and_pin_block (block_sector_t sector) {
                 goto cont;
             } else if ((blocks_meta[ptr].state & DIRTY) == 0
                        && (blocks_meta[ptr].state & ACCESSED) == ACCESSED) {
+                if (print_cache_state) {
+                    log_debug("=|= %d was accessed =|=\n", ptr);
+                }
                 // was access, give chance again
                 set_accessed(ptr, false);
                 goto cont;
             } else if ((blocks_meta[ptr].state & DIRTY) == 0
                        && (blocks_meta[ptr].state & ACCESSED) == 0) {
+                if (print_cache_state) {
+                    log_debug("=|= %d is now evicted =|=\n", ptr);
+                }
                 // not accessed since last time, may be overwritten
                 // mark this entry as to be used by new sector
                 blocks_meta[ptr].sector = sector;
@@ -350,6 +367,10 @@ cache_t get_and_pin_block (block_sector_t sector) {
 cont:
             lock_release_re(&blocks_meta[ptr].lock);
             continue;
+        } else {
+            if (print_cache_state) {
+                log_debug("=|= %d is locked =|=\n", ptr);
+            }
         }
     }
 done:
@@ -446,7 +467,9 @@ void in_cache_and_overwrite_block(block_sector_t  sector,
                               size_t          length) {
     ASSERT(sector < block_size(fs_device));
     ASSERT(ofs + length <= BLOCK_SECTOR_SIZE);
-    log_debug("Write to sector %d\n    ofs: %d - length: %d\n", sector, ofs, length);
+    if (print_debug) {
+        log_debug("Write to sector %d\n    ofs: %d - length: %d\n", sector, ofs, length);
+    }
     if (print_hex) {
         hex_dump(ofs, data, length, false);
         printf("\n");
@@ -477,7 +500,9 @@ void in_cache_and_read(block_sector_t  sector,
                        size_t          length) {
     ASSERT(ofs + length <= BLOCK_SECTOR_SIZE);
     ASSERT(sector < block_size(fs_device));
-    log_debug("Read from sector %d\n    ofs: %d - length: %d\n", sector, ofs, length);
+    if (print_debug) {
+        log_debug("Read from sector %d\n    ofs: %d - length: %d\n", sector, ofs, length);
+    }
 
     if (length == 0) {
         return;
