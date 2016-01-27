@@ -333,8 +333,8 @@ inode_close (struct inode *inode)
             free_map_release(start[i],1);
           }
           free_map_release(inode->start,1);
+          free_map_release(inode->sector, 1);
         }
-      free_map_release(inode->sector, 1);
       free (inode);
       return;
     }
