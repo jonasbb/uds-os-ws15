@@ -311,7 +311,6 @@ lock_release_re_mult (struct lock *lock)
 {
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
-  ASSERT (lock->cnt > 0);
 
   int res = lock->cnt;
   lock->cnt = 0;

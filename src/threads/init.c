@@ -123,6 +123,7 @@ main (void)
   thread_start ();
   serial_init_queue ();
   timer_calibrate ();
+  cache_init();
 
 #ifdef FILESYS
   /* Initialize file system. */

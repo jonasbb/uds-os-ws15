@@ -94,7 +94,6 @@ struct condition sched_new_requests_cond;
 struct request_item {
     struct list_elem elem;
     block_sector_t sector;
-    struct condition cond;
     cache_t idx;
     bool read;
 };
@@ -175,8 +174,6 @@ void sched_background(void *aux UNUSED) {
             // mark cache as reusable again
             unpin(r->idx);
             lock_acquire_re_mult(&sched_lock, cnt);
-            // notify interested parties about success
-            cond_broadcast(&r->cond, &sched_lock);
             free(e);
             e = NULL;
             r = NULL;
@@ -274,7 +271,6 @@ struct request_item *sched_insert(block_sector_t sector,
     ASSERT(r != NULL);
     r->sector = sector;
     r->read = cache_idx == NOT_IN_CACHE;
-    cond_init(&r->cond);
     if (cache_idx == NOT_IN_CACHE) {
         r->idx = get_and_pin_block(sector);
     } else {

@@ -184,9 +184,11 @@ thread_create (const char *name, int priority,
   /* Initialize thread. */
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
-  t->current_work_dir = thread_current()->current_work_dir ?
-                                            dir_reopen(thread_current()->current_work_dir)
-                                            : dir_open_root();
+  if (tid > 3) {
+      t->current_work_dir = thread_current()->current_work_dir ?
+                                                dir_reopen(thread_current()->current_work_dir)
+                                                : dir_open_root();
+  }
 
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
