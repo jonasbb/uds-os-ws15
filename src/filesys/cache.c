@@ -7,12 +7,17 @@
 #include "threads/vaddr.h"
 
 // static functions
-static cache_t evict_block(void);
-static void set_accessed (cache_t centry, bool accessed);
-static void set_dirty (cache_t centry, bool dirty);
-static void pin (cache_t centry);
-static cache_t get_cache_position (block_sector_t sector);
-static void update_cache_stats(void);
+cache_t get_and_lock_sector_data(block_sector_t sector);
+static void set_accessed (cache_t idx,
+                          bool    accessed);
+static void set_dirty (cache_t idx,
+                       bool    dirty);
+static void set_pin (cache_t idx,
+                     bool    pin);
+static void set_unready (cache_t idx,
+                         bool    unready);
+static void pin (cache_t idx);
+void *idx_to_ptr(cache_t idx);
 
 /***********************************************************
  * Configuration / Data for cache
@@ -31,7 +36,6 @@ enum cache_state {
 };
 typedef uint8_t cache_state_t;
 
-// TODO have locks per entry
 struct cache_entry {
     volatile block_sector_t sector;
     cache_state_t state;
@@ -58,7 +62,22 @@ volatile cache_t evict_ptr;
 /***********************************************************
  * scheduler
  ***********************************************************/
+// function declaraions
+bool request_item_less_func (const struct list_elem *a_,
+                             const struct list_elem *b_,
+                             void *aux);
 void sched_read_do(block_sector_t sector, bool isprefetch);
+struct request_item *sched_contains_req(block_sector_t sector,
+                                        bool           read);
+void sched_init(void);
+void sched_background(void *aux UNUSED);
+cache_t sched_read(block_sector_t sector);
+cache_t sched_read_do(block_sector_t sector,
+                      bool           isprefetch);
+void sched_write(block_sector_t sector,
+                 cache_t        idx);
+cache_t sched_insert(block_sector_t sector,
+                     cache_t        cache_idx);
 
 struct lock sched_lock;
 struct list sched_outstanding_requests;
@@ -71,6 +90,7 @@ struct request_item {
     bool read;
 }
 
+static
 bool request_item_less_func (const struct list_elem *a_,
                              const struct list_elem *b_,
                              void *aux) {
@@ -97,6 +117,7 @@ struct request_item *sched_contains_req(block_sector_t sector,
     return res;
 }
 
+static
 void sched_init() {
     // init data structures
     lock_init(&sched_lock);
@@ -161,6 +182,7 @@ void sched_background(void *aux UNUSED) {
 }
 
 /* Increases reference count on new block */
+static
 cache_t sched_read(block_sector_t sector) {
     lock_acquire_re(&sched_lock);
     cache_t res;
@@ -173,7 +195,8 @@ cache_t sched_read(block_sector_t sector) {
 }
 
 static
-cache_t sched_read_do(block_sector_t sector, bool isprefetch) {
+cache_t sched_read_do(block_sector_t sector,
+                      bool           isprefetch) {
     lock_acquire_re(&sched_lock);
     cache_t res;
     if ((res = sched_contains_req(sector, true)) == NULL) {
@@ -210,6 +233,7 @@ void sched_read_sync(block_sector_t sector) {
 }
 */
 
+static
 void sched_write(block_sector_t sector,
                  cache_t        idx) {
     lock_acquire_re(&sched_lock);
@@ -340,6 +364,7 @@ done:
     return ptr;
 }
 
+/* Set a whole block to only zeros */
 cache_t zero_out_sector_data(block_sector_t) {
     lock_acquire(&cache_lock);
     cache_t idx = get_and_pin_block(sector);
