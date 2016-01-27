@@ -222,30 +222,6 @@ cache_t sched_read_do(block_sector_t sector,
     return r;
 }
 
-/*
-void sched_read_sync(block_sector_t sector) {
-    lock_acquire_re(&sched_lock);
-    // prefetch block
-    sched_read_do(sector+1, NOT_IN_CACHE);
-    struct request_item *r;
-    cache_t idx;
-    if ((r = sched_contains_req(sector, true)) == NULL) {
-        // request not present, create new one
-        r = sched_insert(sector, NOT_IN_CACHE);
-        // we already have a lock for r from this thread
-        idx = r->idx;
-    } else {
-        // r not locked
-        idx = r->idx;
-        lock_acquire(&blocks_meta[idx].lock);
-    }
-    lock_release_re(&sched_lock);
-    // schedule and wait
-    cond_wait(&blocks_meta[idx].cond, &blocks_meta[idx].lock);
-    lock_release(&blocks_meta[idx].lock);
-}
-*/
-
 static
 void sched_write(block_sector_t sector,
                  cache_t        idx) {
@@ -257,19 +233,6 @@ void sched_write(block_sector_t sector,
     }
     lock_release_re(&sched_lock);
 }
-
-/*void sched_write_sync(block_sector_t sector,
-                      cache_t        idx) {
-    lock_acquire_re(&sched_lock);
-    struct request_item *r;
-    if ((r = sched_contains_req(sector, false)) == NULL) {
-        // request not present, create new one
-        r = sched_insert(sector, idx);
-    }
-    // schedule and wait
-    cond_wait(r->cond, &sched_lock);
-    lock_release_re(&sched_lock);
-}*/
 
 static
 struct request_item *sched_insert(block_sector_t sector,
