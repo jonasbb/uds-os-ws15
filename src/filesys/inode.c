@@ -82,6 +82,7 @@ byte_to_sector_expand (struct inode *inode, off_t pos)
                     (pos/(128*BLOCK_SECTOR_SIZE))*sizeof(block_sector_t),
                     &sector,
                     sizeof(sector));
+  ASSERT(sector < block_size(fs_device));
   if (sector == NON_EXISTANT) {
     lock_acquire(&inode->lock);
     /* Revalidate still not existant */
@@ -224,10 +225,10 @@ inode_open (block_sector_t sector)
   inode->deny_write_cnt = 0;
   inode->removed = false;
   lock_init(&(inode->lock));
-  in_cache_and_overwrite_block(inode->sector,
-                               offsetof(struct inode_disk,start),
-                               inode + offsetof(struct inode,start),
-                               offsetof(struct inode_disk,unused2));
+  in_cache_and_read(inode->sector,
+                    offsetof(struct inode_disk,start),
+                    inode + offsetof(struct inode,start),
+                    offsetof(struct inode_disk,unused2) - offsetof(struct inode_disk,start));
   return inode;
 }
 
