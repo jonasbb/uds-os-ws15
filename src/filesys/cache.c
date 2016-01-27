@@ -189,6 +189,8 @@ void sched_background(void *aux UNUSED) {
 /* Increases reference count on new block */
 static
 cache_t sched_read(block_sector_t sector) {
+    ASSERT(sector < block_size(fs_device));
+
     lock_acquire_re(&sched_lock);
     cache_t res;
     res = sched_read_do(sector, false);
@@ -244,6 +246,8 @@ void sched_read_sync(block_sector_t sector) {
 static
 void sched_write(block_sector_t sector,
                  cache_t        idx) {
+    ASSERT(sector < block_size(fs_device));
+
     lock_acquire_re(&sched_lock);
     if (sched_contains_req(sector, false) == NULL) {
         sched_insert(sector, idx);
@@ -398,6 +402,7 @@ void zero_out_sector_data(block_sector_t sector) {
 
 static
 cache_t get_and_lock_sector_data(block_sector_t sector) {
+    ASSERT(sector < block_size(fs_device));
     // return locked block with data from sector
     // if not already in cache load into cache
 
@@ -467,6 +472,7 @@ void in_cache_and_overwrite_block(block_sector_t  sector,
                               size_t          ofs,
                               void           *data,
                               size_t          length) {
+    ASSERT(sector < block_size(fs_device));
     ASSERT(ofs + length <= BLOCK_SECTOR_SIZE);
 
     if (length == 0) {
@@ -489,6 +495,7 @@ void in_cache_and_read(block_sector_t  sector,
                        void           *data,
                        size_t          length) {
     ASSERT(ofs + length <= BLOCK_SECTOR_SIZE);
+    ASSERT(sector < block_size(fs_device));
 
     if (length == 0) {
         return;
