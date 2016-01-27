@@ -347,7 +347,7 @@ cache_t get_and_pin_block (block_sector_t sector) {
                     log_debug("=|= %d is PINNED (%d), refs %d =|=\n", ptr, blocks_meta[ptr].state & PIN, blocks_meta[ptr].refs);
                 }
                 // pinned page, may not do anything about it
-                goto cont;
+                goto cont1;
             } else if ((blocks_meta[ptr].state & DIRTY) == DIRTY) {
                 if (print_cache_state) {
                     log_debug("=|= %d is scheduled for write =|=\n", ptr);
@@ -356,8 +356,9 @@ cache_t get_and_pin_block (block_sector_t sector) {
 
                 // pin page so that we may release the lock
                 pin(ptr);
+                lock_release_re(&blocks_meta[ptr].lock);
                 sched_write(blocks_meta[ptr].sector, ptr);
-                goto cont;
+                goto cont2;
             } else if ((blocks_meta[ptr].state & DIRTY) == 0
                        && (blocks_meta[ptr].state & ACCESSED) == ACCESSED) {
                 if (print_cache_state) {
@@ -365,7 +366,7 @@ cache_t get_and_pin_block (block_sector_t sector) {
                 }
                 // was access, give chance again
                 set_accessed(ptr, false);
-                goto cont;
+                goto cont1;
             } else if ((blocks_meta[ptr].state & DIRTY) == 0
                        && (blocks_meta[ptr].state & ACCESSED) == 0) {
                 if (print_cache_state) {
@@ -381,9 +382,9 @@ cache_t get_and_pin_block (block_sector_t sector) {
 
             // the above case should handle all different cache states
             NOT_REACHED();
-;
-cont:
+cont1:
             lock_release_re(&blocks_meta[ptr].lock);
+cont2:
             continue;
         } else {
             if (print_cache_state) {
