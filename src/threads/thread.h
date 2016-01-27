@@ -105,6 +105,10 @@ struct thread
     // process id which this thread belongs to
     pid_t pid;
     
+    // current working directory
+    // use for filesys
+    struct dir *current_work_dir;
+
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
