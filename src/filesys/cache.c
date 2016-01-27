@@ -322,7 +322,7 @@ cache_t get_and_pin_block (block_sector_t sector) {
                     || blocks_meta[ptr].refs > 0) {
                 // pinned page, may not do anything about it
                 goto cont;
-            } else if ((blocks_meta[ptr].state & DIRTY) == 1) {
+            } else if ((blocks_meta[ptr].state & DIRTY) == DIRTY) {
                 // dirty, shedule write
 
                 // pin page so that we may release the lock
@@ -330,7 +330,7 @@ cache_t get_and_pin_block (block_sector_t sector) {
                 sched_write(blocks_meta[ptr].sector, ptr);
                 goto cont;
             } else if ((blocks_meta[ptr].state & DIRTY) == 0
-                       && (blocks_meta[ptr].state & ACCESSED) == 1) {
+                       && (blocks_meta[ptr].state & ACCESSED) == ACCESSED) {
                 // was access, give chance again
                 set_accessed(ptr, false);
                 goto cont;
@@ -343,6 +343,10 @@ cache_t get_and_pin_block (block_sector_t sector) {
                 set_unready(ptr, true);
                 goto done;
             }
+
+            // the above case should handle all different cache states
+            NOT_REACHED();
+;
 cont:
             lock_release_re(&blocks_meta[ptr].lock);
             continue;
