@@ -479,6 +479,7 @@ void in_cache_and_overwrite_block(block_sector_t  sector,
                               size_t          length) {
     ASSERT(sector < block_size(fs_device));
     ASSERT(ofs + length <= BLOCK_SECTOR_SIZE);
+    log_debug("Write to sector %d\n    ofs: %d - length: %d\n", sector, ofs, length);
     if (print_hex) {
         hex_dump(ofs, data, length, false);
         printf("\n");
@@ -509,6 +510,7 @@ void in_cache_and_read(block_sector_t  sector,
                        size_t          length) {
     ASSERT(ofs + length <= BLOCK_SECTOR_SIZE);
     ASSERT(sector < block_size(fs_device));
+    log_debug("Read from sector %d\n    ofs: %d - length: %d\n", sector, ofs, length);
 
     if (length == 0) {
         return;

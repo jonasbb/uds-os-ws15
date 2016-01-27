@@ -162,7 +162,7 @@ inode_init (void)
 bool
 inode_create (block_sector_t sector, off_t length, bool is_dir)
 {
-  log_debug("!!!inode_create!!!\n");
+  log_debug("!!!inode_create (sector %d, length %d, dir %d)!!!\n", sector, length, is_dir);
   struct inode_disk *disk_inode = NULL;
   bool success = false;
 
@@ -226,7 +226,7 @@ inode_create (block_sector_t sector, off_t length, bool is_dir)
 struct inode *
 inode_open (block_sector_t sector)
 {
-  log_debug("!!!inode_open!!!\n");
+  log_debug("!!!inode_open (sector %d)!!!\n", sector);
   struct list_elem *e;
   struct inode *inode;
 
@@ -283,6 +283,7 @@ inode_reopen (struct inode *inode)
 block_sector_t
 inode_get_inumber (struct inode *inode)
 {
+  log_debug("!!!inode_get_inumber!!!\n");
   lock_acquire(&inode->lock);
   block_sector_t tmp = inode->sector;
   lock_release(&inode->lock);
@@ -295,7 +296,7 @@ inode_get_inumber (struct inode *inode)
 void
 inode_close (struct inode *inode) 
 {
-  log_debug("!!!inode_close!!!\n");
+  log_debug("!!!inode_close (sector %d)!!!\n", inode->sector);
   /* Ignore null pointer. */
   if (inode == NULL)
     return;
@@ -304,6 +305,7 @@ inode_close (struct inode *inode)
   /* Release resources if this was the last opener. */
   if (--inode->open_cnt == 0)
     {
+      log_debug("Close inode %d.\n", inode->sector);
       lock_acquire(&inode_list_lock);
       /* Remove from inode list and release lock. */
       list_remove (&inode->elem);
@@ -311,6 +313,7 @@ inode_close (struct inode *inode)
       /* Deallocate blocks if removed. */
       if (inode->removed)
         {
+          log_debug("Remove inode %d after close.\n", inode->sector);
           block_sector_t start[128];
           in_cache_and_read(inode->start, 0, &start, BLOCK_SECTOR_SIZE);
           int i,j;
@@ -401,7 +404,7 @@ off_t
 inode_write_at (struct inode *inode, void *buffer_, off_t size,
                 off_t offset) 
 {
-  log_debug("!!!inode_write_at!!!\n");
+  log_debug("!!!inode_write_at (inode %d, size %d, offset %d)!!!\n", inode->sector, size, offset);
   uint8_t *buffer = buffer_;
   off_t bytes_written = 0;
   off_t o_offset = offset;
