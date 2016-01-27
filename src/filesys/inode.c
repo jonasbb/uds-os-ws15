@@ -264,6 +264,7 @@ inode_get_inumber (struct inode *inode)
 void
 inode_close (struct inode *inode) 
 {
+  log_debug("!!!inode_close!!!\n");
   /* Ignore null pointer. */
   if (inode == NULL)
     return;
@@ -306,6 +307,7 @@ inode_close (struct inode *inode)
 void
 inode_remove (struct inode *inode) 
 {
+  log_debug("!!!inode_remove!!!\n");
   ASSERT (inode != NULL);
   lock_acquire(&inode->lock);
   inode->removed = true;
@@ -318,6 +320,7 @@ inode_remove (struct inode *inode)
 off_t
 inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset) 
 {
+  log_debug("!!!inode_read_at!!!\n");
   uint8_t *buffer = buffer_;
   off_t bytes_read = 0;
 
@@ -367,6 +370,7 @@ off_t
 inode_write_at (struct inode *inode, void *buffer_, off_t size,
                 off_t offset) 
 {
+  log_debug("!!!inode_write_at!!!\n");
   uint8_t *buffer = buffer_;
   off_t bytes_written = 0;
   off_t o_offset = offset;
@@ -418,6 +422,7 @@ inode_write_at (struct inode *inode, void *buffer_, off_t size,
 void
 inode_deny_write (struct inode *inode)
 {
+  log_debug("!!!inode_deny_write!!!\n");
   lock_acquire(&inode->lock);
   inode->deny_write_cnt++;
   ASSERT (inode->deny_write_cnt <= inode->open_cnt);
@@ -430,6 +435,7 @@ inode_deny_write (struct inode *inode)
 void
 inode_allow_write (struct inode *inode)
 {
+  log_debug("!!!inode_allow_write!!!\n");
   lock_acquire(&inode->lock);
   ASSERT (inode->deny_write_cnt > 0);
   ASSERT (inode->deny_write_cnt <= inode->open_cnt);
@@ -441,6 +447,7 @@ inode_allow_write (struct inode *inode)
 off_t
 inode_length (struct inode *inode)
 {
+  log_debug("!!!inode_length!!!\n");
   lock_acquire(&inode->lock);
   off_t tmp = inode->length;
   lock_release(&inode->lock);
