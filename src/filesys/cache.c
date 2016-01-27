@@ -316,9 +316,19 @@ void cache_init() {
 cache_t get_and_pin_block (block_sector_t sector) {
     // sector is used to relabel the cache entry for new usage
     cache_t ptr;
+    int cnt = 0;
 
     while(true) {
         ptr = evict_ptr;
+        cnt++;
+        if (ptr == 0) {
+            if (cnt == CACHE_SIZE) {
+                // be nice to the others
+                // apparently there is nothing to do for you right now
+                thread_yield();
+            }
+            cnt = 0;
+        }
         // increment
         evict_ptr = (evict_ptr + 1) % CACHE_SIZE;
 
