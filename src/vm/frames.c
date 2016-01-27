@@ -232,7 +232,7 @@ frame_evict() {
                     struct pagetable_entry* old_pte = frametable.frametable[frametable.evict_ptr].pte;
                     struct thread *t = thread_from_tid(frametable.frametable[frametable.evict_ptr].tid);
                     if (old_pte->accessed) {
-                        pagedir_set_accessed(t->pagedir, 
+                        pagedir_set_accessed(t->pagedir,
                                         pg_no_to_addr(frametable.frametable[frametable.evict_ptr].virt_address), false);
                         continue;
                     }

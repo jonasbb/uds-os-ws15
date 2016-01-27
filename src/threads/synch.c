@@ -354,9 +354,9 @@ cond_wait (struct condition *cond, struct lock *lock)
   
   sema_init (&waiter.semaphore, 0);
   list_push_back (&cond->waiters, &waiter.elem);
-  lock_release (lock);
+  int cnt = lock_release_re_mult (lock);
   sema_down (&waiter.semaphore);
-  lock_acquire (lock);
+  lock_acquire_re_mult (lock, cnt);
 }
 
 /* If any threads are waiting on COND (protected by LOCK), then
