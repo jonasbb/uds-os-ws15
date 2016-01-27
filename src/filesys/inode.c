@@ -57,6 +57,7 @@ struct inode
 static block_sector_t
 byte_to_sector (struct inode *inode, off_t pos)
 {
+  log_debug("!!!byte_to_sector!!!\n");
   block_sector_t sector;
   ASSERT (inode != NULL);
   in_cache_and_read(inode->start,
@@ -75,6 +76,7 @@ byte_to_sector (struct inode *inode, off_t pos)
 static block_sector_t
 byte_to_sector_expand (struct inode *inode, off_t pos)
 {
+  log_debug("!!!byte_to_sector_expand!!!\n");
   block_sector_t sector;
   ASSERT (inode != NULL);
 
@@ -161,6 +163,7 @@ inode_init (void)
 bool
 inode_create (block_sector_t sector, off_t length, bool is_dir)
 {
+  log_debug("!!!inode_create!!!\n");
   struct inode_disk *disk_inode = NULL;
   bool success = false;
 
@@ -193,6 +196,7 @@ inode_create (block_sector_t sector, off_t length, bool is_dir)
 struct inode *
 inode_open (block_sector_t sector)
 {
+  log_debug("!!!inode_open!!!\n");
   struct list_elem *e;
   struct inode *inode;
 
@@ -236,6 +240,7 @@ inode_open (block_sector_t sector)
 struct inode *
 inode_reopen (struct inode *inode)
 {
+  log_debug("!!!inode_reopen!!!\n");
   if (inode != NULL) {
     lock_acquire(&inode->lock);
     inode->open_cnt++;
