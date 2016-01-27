@@ -181,36 +181,41 @@ inode_create (block_sector_t sector, off_t length, bool is_dir)
       if (free_map_allocate (1, &disk_inode->start))
         {
           in_cache_and_overwrite_block (sector, 0, disk_inode, sizeof(*disk_inode));
-
-          // special case for handling the free map
-          // as soon as the free_map_file is create the free map will always
-          // try to write the data to disk immediately
-          // this causes us problems in case we want to allocate space on disk
-          // for the free_map itself, because we get into a loop of request/write/expand
-          // cycles
-          //
-          // By allocating the file completely in front, this should be avoidable
-
-          // assume at most 128 blocks are needed for the free map
-          block_sector_t indirect_blk, data_start, tmp;
-          ASSERT(free_map_allocate(1, &indirect_blk));
-          // link indirect in start block
           zero_out_sector_data(disk_inode->start);
-          in_cache_and_overwrite_block(disk_inode->start,
-                                       0, // first indirect block
-                                       &indirect_blk,
-                                       sizeof(indirect_blk));
-          // get blocks for raw file data
-          size_t blocks_needed = DIV_ROUND_UP(length, BLOCK_SECTOR_SIZE);
-          ASSERT(free_map_allocate(blocks_needed, &data_start));
-          zero_out_sector_data(indirect_blk);
-          int i;
-          for (i = 0; i < blocks_needed; i++) {
-              tmp = data_start + i;
-              in_cache_and_overwrite_block(indirect_blk,
-                                           i * sizeof(tmp),
-                                           &tmp,
-                                           sizeof(tmp));
+
+          if (sector == FREE_MAP_SECTOR) {
+              // special case for handling the free map
+              // as soon as the free_map_file is create the free map will always
+              // try to write the data to disk immediately
+              // this causes us problems in case we want to allocate space on disk
+              // for the free_map itself, because we get into a loop of request/write/expand
+              // cycles
+              //
+              // By allocating the file completely in front, this should be avoidable
+
+              printf("alloc start - %d\n", disk_inode->start);
+              // assume at most 128 blocks are needed for the free map
+              block_sector_t indirect_blk, data_start, tmp;
+              ASSERT(free_map_allocate(1, &indirect_blk));
+              printf("indirect %d\n", indirect_blk);
+              // link indirect in start block
+              in_cache_and_overwrite_block(disk_inode->start,
+                                           0, // first indirect block
+                                           &indirect_blk,
+                                           sizeof(indirect_blk));
+              // get blocks for raw file data
+              size_t blocks_needed = DIV_ROUND_UP(length, BLOCK_SECTOR_SIZE);
+              ASSERT(free_map_allocate(blocks_needed, &data_start));
+              zero_out_sector_data(indirect_blk);
+              int i;
+              for (i = 0; i < blocks_needed; i++) {
+                  tmp = data_start + i;
+                  printf("tmp %d\n", tmp);
+                  in_cache_and_overwrite_block(indirect_blk,
+                                               i * sizeof(tmp),
+                                               &tmp,
+                                               sizeof(tmp));
+              }
           }
           // now update the data in the start sector with actual addresses
           success = true;
