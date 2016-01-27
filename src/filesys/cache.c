@@ -207,7 +207,9 @@ cache_t sched_read_do(block_sector_t sector,
     if ((res = sched_contains_req(sector, true)) == NULL) {
         res = sched_insert(sector, NOT_IN_CACHE);
     }
-    if (!isprefetch && sched_contains_req(sector+1, true) == NULL) {
+    if (!isprefetch && sched_contains_req(sector+1, true) == NULL
+            && sector < block_size(fs_device)) // check for out of bound accesses
+            {
         sched_insert(sector+1, NOT_IN_CACHE);
     }
     cache_t r = res->idx;
