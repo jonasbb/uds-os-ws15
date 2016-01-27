@@ -76,8 +76,12 @@ byte_to_sector (struct inode *inode, off_t pos)
 static block_sector_t
 byte_to_sector_expand (struct inode *inode, off_t pos)
 {
+<<<<<<< cb3a2c061ee1c8fd1279948751b172ef318e19e1
   log_debug("!!!byte_to_sector_expand!!!\n");
   block_sector_t sector;
+=======
+  block_sector_t tmp, sector;
+>>>>>>> (more) correctly expand files on write
   ASSERT (inode != NULL);
 
   in_cache_and_read(inode->start,
@@ -111,17 +115,16 @@ byte_to_sector_expand (struct inode *inode, off_t pos)
   }
 
 step2:
-  in_cache_and_read(sector,
-                    (pos%(128*BLOCK_SECTOR_SIZE))*sizeof(block_sector_t)/BLOCK_SECTOR_SIZE
-                    ,
+  tmp = sector;
+  in_cache_and_read(tmp,
+                    (pos%(128*BLOCK_SECTOR_SIZE))*sizeof(block_sector_t)/BLOCK_SECTOR_SIZE,
                     &sector,
                     sizeof(sector));
   if (sector == NON_EXISTANT) {
     lock_acquire(&inode->lock);
     /* Revalidate still not existant */
-    in_cache_and_read(sector,
-                    (pos%(128*BLOCK_SECTOR_SIZE))*sizeof(block_sector_t)/BLOCK_SECTOR_SIZE
-                    ,
+    in_cache_and_read(tmp,
+                    (pos%(128*BLOCK_SECTOR_SIZE))*sizeof(block_sector_t)/BLOCK_SECTOR_SIZE,
                     &sector,
                     sizeof(sector));
     /* Already added, no need anymore */
@@ -133,8 +136,8 @@ step2:
       lock_release(&inode->lock);
       return NON_EXISTANT;
     }
-    zero_out_sector_data(sector); //TODO
-    in_cache_and_overwrite_block(inode->start,
+    zero_out_sector_data(sector);
+    in_cache_and_overwrite_block(tmp,
                     (pos%(128*BLOCK_SECTOR_SIZE))*sizeof(block_sector_t)/BLOCK_SECTOR_SIZE,
                     &sector,
                     sizeof(sector));
