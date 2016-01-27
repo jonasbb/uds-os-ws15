@@ -160,6 +160,7 @@ void sched_background(void *aux UNUSED) {
             int cnt = lock_release_re_mult(&sched_lock);
             // perform block operation
             if (r->read) {
+                log_debug(":S: BLCK_WRTR is reading... :S:\n");
                 block_read(fs_device,
                            r->sector,
                            idx_to_ptr(r->idx));
@@ -170,7 +171,9 @@ void sched_background(void *aux UNUSED) {
                 unpin(r->idx);
                 cond_broadcast(&blocks_meta[r->idx].cond, &blocks_meta[r->idx].lock);
                 lock_release_re(&blocks_meta[r->idx].lock);
+                log_debug(":S: BLCK_WRTR finisched reading. :S:\n");
             } else {
+                log_debug(":S: BLCK_WRTR is writing... :S:\n");
                 lock_acquire_re(&blocks_meta[r->idx].lock);
                 block_write(fs_device,
                             r->sector,
@@ -179,8 +182,11 @@ void sched_background(void *aux UNUSED) {
                 // mark cache as reusable again
                 unpin(r->idx);
                 lock_release_re(&blocks_meta[r->idx].lock);
+                log_debug(":S: BLCK_WRTR finisched writing. :S:\n");
             }
+            printf(":S: before re sched :S:\n");
             lock_acquire_re_mult(&sched_lock, cnt);
+            printf(":S: after re sched :S:\n");
             free(r);
             r = NULL;
         }
@@ -338,7 +344,7 @@ cache_t get_and_pin_block (block_sector_t sector) {
             if ((blocks_meta[ptr].state & PIN) != 0
                     || blocks_meta[ptr].refs > 0) {
                 if (print_cache_state) {
-                    log_debug("=|= %d is PINNED, refs %d =|=\n", ptr, blocks_meta[ptr].refs);
+                    log_debug("=|= %d is PINNED (%d), refs %d =|=\n", ptr, blocks_meta[ptr].state & PIN, blocks_meta[ptr].refs);
                 }
                 // pinned page, may not do anything about it
                 goto cont;
