@@ -11,7 +11,7 @@
 
 // TODO DEBUG
 const bool print_hex = false;
-const bool print_debug = false;
+const bool print_debug = true;
 const bool print_cache_state = false;
 
 // static functions
@@ -26,6 +26,8 @@ static void set_unready (cache_t idx,
                          bool    unready);
 static void pin (cache_t idx);
 static void *idx_to_ptr(cache_t idx);
+
+struct lock c_lock;
 
 /***********************************************************
  * Configuration / Data for cache
@@ -93,7 +95,7 @@ static
 struct request_item *sched_insert(block_sector_t sector,
                                   cache_t        cache_idx);
 
-struct lock sched_lock;
+struct lock sched_list_lock;
 struct list sched_outstanding_requests;
 struct condition sched_new_requests_cond;
 struct request_item {
@@ -114,7 +116,7 @@ bool request_item_less_func (const struct list_elem *a_,
 
 struct request_item *sched_contains_req(block_sector_t sector,
                                         bool           read) {
-    lock_acquire_re(&sched_lock);
+    lock_acquire_re(&c_lock);
     struct request_item *res = NULL;
     struct list_elem *e;
     for (e = list_begin (&sched_outstanding_requests);
@@ -126,14 +128,19 @@ struct request_item *sched_contains_req(block_sector_t sector,
             break;
         }
     }
-    lock_release_re(&sched_lock);
+    lock_release_re(&c_lock);
     return res;
+}
+
+static
+void do_nothing(void *aux UNUSED) {
+    return;
 }
 
 static
 void sched_init() {
     // init data structures
-    lock_init(&sched_lock);
+    lock_init(&sched_list_lock);
     list_init(&sched_outstanding_requests);
     cond_init(&sched_new_requests_cond);
 
@@ -146,7 +153,7 @@ void sched_init() {
 
 static
 void sched_background(void *aux UNUSED) {
-    lock_acquire_re(&sched_lock);
+    lock_acquire_re(&sched_list_lock);
     while(true) {
         struct list_elem *e = NULL;
         struct request_item *r = NULL;
@@ -157,36 +164,36 @@ void sched_background(void *aux UNUSED) {
             r = list_entry (e, struct request_item, elem);
             e = list_next(e);
             list_remove(&r->elem);
-            int cnt = lock_release_re_mult(&sched_lock);
+            int cnt = lock_release_re_mult(&sched_list_lock);
             // perform block operation
             if (r->read) {
                 log_debug(":S: BLCK_WRTR is reading... :S:\n");
                 block_read(fs_device,
                            r->sector,
                            idx_to_ptr(r->idx));
-                lock_acquire_re(&blocks_meta[r->idx].lock);
+                lock_acquire_re(&c_lock);
                 // now ready as data is loaded and inform interrested parties
                 set_unready(r->idx, false);
                 // mark cache as reusable again
                 unpin(r->idx);
-                cond_broadcast(&blocks_meta[r->idx].cond, &blocks_meta[r->idx].lock);
-                lock_release_re(&blocks_meta[r->idx].lock);
+                cond_broadcast(&blocks_meta[r->idx].cond, &c_lock);
+                lock_release_re(&c_lock);
                 log_debug(":S: BLCK_WRTR finisched reading. :S:\n");
             } else {
                 log_debug(":S: BLCK_WRTR is writing... :S:\n");
-                lock_acquire_re(&blocks_meta[r->idx].lock);
+                lock_acquire_re(&c_lock);
                 block_write(fs_device,
                             r->sector,
                             idx_to_ptr(r->idx));
                 set_dirty(r->idx, false);
                 // mark cache as reusable again
                 unpin(r->idx);
-                lock_release_re(&blocks_meta[r->idx].lock);
+                lock_release_re(&c_lock);
                 log_debug(":S: BLCK_WRTR finisched writing. :S:\n");
             }
-            printf(":S: before re sched :S:\n");
-            lock_acquire_re_mult(&sched_lock, cnt);
-            printf(":S: after re sched :S:\n");
+            log_debug(":S: before re sched :S:\n");
+            lock_acquire_re_mult(&sched_list_lock, cnt);
+            log_debug(":S: after re sched :S:\n");
             free(r);
             r = NULL;
         }
@@ -196,7 +203,7 @@ void sched_background(void *aux UNUSED) {
 
         log_debug(":S: BLCK_WRTR is going to sleep... :S:\n");
         // wait until there is something to do
-        cond_wait(&sched_new_requests_cond, &sched_lock);
+        cond_wait(&sched_new_requests_cond, &sched_list_lock);
         log_debug(":S: BLCK_WRTR was woken up :S:\n");
     }
 }
@@ -204,22 +211,25 @@ void sched_background(void *aux UNUSED) {
 /* Increases reference count on new block */
 static
 cache_t sched_read(block_sector_t sector) {
+    log_debug(":S: %02d sched_read enter (sector %d) :S:\n", thread_current()->tid, sector);
     ASSERT(sector < block_size(fs_device));
 
-    lock_acquire_re(&sched_lock);
+    lock_acquire_re(&c_lock);
     cache_t res;
     res = sched_read_do(sector, false);
-    lock_acquire_re(&blocks_meta[res].lock);
+    lock_acquire_re(&c_lock);
     blocks_meta[res].refs += 1;
-    lock_release_re(&blocks_meta[res].lock);
-    lock_release_re(&sched_lock);
+    lock_release_re(&c_lock);
+    lock_release_re(&c_lock);
+    log_debug(":S: %02d sched_read exit (sector %d) :S:\n", thread_current()->tid, sector);
     return res;
 }
 
 static
 cache_t sched_read_do(block_sector_t sector,
                       bool           isprefetch) {
-    lock_acquire_re(&sched_lock);
+    log_debug(":S: %02d sched_read_do enter (sector %d) :S:\n", thread_current()->tid, sector);
+    lock_acquire_re(&c_lock);
     struct request_item *res;
     if ((res = sched_contains_req(sector, true)) == NULL) {
         res = sched_insert(sector, NOT_IN_CACHE);
@@ -230,44 +240,57 @@ cache_t sched_read_do(block_sector_t sector,
         sched_insert(sector+1, NOT_IN_CACHE);
     }
     cache_t r = res->idx;
-    lock_release_re(&sched_lock);
+    ASSERT(r < CACHE_SIZE);
+    lock_release_re(&c_lock);
+    log_debug(":S: %02d sched_read_do exit (sector %d) :S:\n", thread_current()->tid, sector);
     return r;
 }
 
 static
 void sched_write(block_sector_t sector,
                  cache_t        idx) {
+    log_debug(":S: %02d sched_write enter (sector %d) :S:\n", thread_current()->tid, sector);
     ASSERT(sector < block_size(fs_device));
 
-    lock_acquire_re(&sched_lock);
+    lock_acquire_re(&c_lock);
     if (sched_contains_req(sector, false) == NULL) {
         sched_insert(sector, idx);
     }
-    lock_release_re(&sched_lock);
+    lock_release_re(&c_lock);
+    log_debug(":S: %02d sched_write exit (sector %d) :S:\n", thread_current()->tid, sector);
 }
 
 static
 struct request_item *sched_insert(block_sector_t sector,
                                   cache_t        cache_idx) {
-    lock_acquire_re(&sched_lock);
+    log_debug(":S: %02d sched_insert enter (sector %d) :S:\n", thread_current()->tid, sector);
+    lock_acquire_re(&c_lock);
     struct request_item *r = malloc(sizeof(*r));
     ASSERT(r != NULL);
     r->sector = sector;
     r->read = cache_idx == NOT_IN_CACHE;
     if (cache_idx == NOT_IN_CACHE) {
         r->idx = get_and_pin_block(sector);
+        ASSERT(r->idx < CACHE_SIZE);
     } else {
         r->idx = cache_idx;
+        ASSERT(r->idx < CACHE_SIZE);
     }
 
     // add to queue
+    int cnt = lock_release_re_mult(&c_lock);
+    lock_acquire_re(&sched_list_lock);
     list_insert_ordered(&sched_outstanding_requests,
                         &r->elem,
                         request_item_less_func,
                         NULL);
+    cond_broadcast(&sched_new_requests_cond, &sched_list_lock);
+    lock_release_re(&sched_list_lock);
+    lock_acquire_re_mult(&c_lock, cnt);
     log_debug(":S: Broadcast to thread :S:\n");
-    cond_broadcast(&sched_new_requests_cond, &sched_lock);
-    lock_release_re(&sched_lock);
+    ASSERT(r->idx < CACHE_SIZE);
+    lock_release_re(&c_lock);
+    log_debug(":S: %02d sched_insert exit (sector %d) :S:\n", thread_current()->tid, sector);
     return r;
 }
 /***********************************************************
@@ -277,6 +300,7 @@ struct request_item *sched_insert(block_sector_t sector,
 void cache_init() {
     sched_init();
     lock_init(&cache_lock);
+    lock_init(&c_lock);
 
     // init state
     evict_ptr = 0;
@@ -322,6 +346,7 @@ void cache_init() {
  * Returns NOT_IN_CACHE on failure.
  */
 cache_t get_and_pin_block (block_sector_t sector) {
+    log_debug(":C: get_and_pin_block enter :C:\n");
     // sector is used to relabel the cache entry for new usage
     cache_t ptr;
     int cnt = 0;
@@ -340,7 +365,7 @@ cache_t get_and_pin_block (block_sector_t sector) {
         // increment
         evict_ptr = (evict_ptr + 1) % CACHE_SIZE;
 
-        if (lock_try_acquire_re(&blocks_meta[ptr].lock)) {
+        if (lock_try_acquire_re(&c_lock)) {
             if ((blocks_meta[ptr].state & PIN) != 0
                     || blocks_meta[ptr].refs > 0) {
                 if (print_cache_state) {
@@ -356,7 +381,7 @@ cache_t get_and_pin_block (block_sector_t sector) {
 
                 // pin page so that we may release the lock
                 pin(ptr);
-                lock_release_re(&blocks_meta[ptr].lock);
+                lock_release_re(&c_lock);
                 sched_write(blocks_meta[ptr].sector, ptr);
                 goto cont2;
             } else if ((blocks_meta[ptr].state & DIRTY) == 0
@@ -383,7 +408,7 @@ cache_t get_and_pin_block (block_sector_t sector) {
             // the above case should handle all different cache states
             NOT_REACHED();
 cont1:
-            lock_release_re(&blocks_meta[ptr].lock);
+            lock_release_re(&c_lock);
 cont2:
             continue;
         } else {
@@ -393,26 +418,30 @@ cont2:
         }
     }
 done:
-    lock_release_re(&blocks_meta[ptr].lock);
+    lock_release_re(&c_lock);
     ASSERT(ptr < CACHE_SIZE);
+    log_debug(":C: get_and_pin_block exit :C:\n");
     return ptr;
 }
 
 /* Set a whole block to only zeros */
 void zero_out_sector_data(block_sector_t sector) {
-    lock_acquire(&cache_lock);
+    log_debug(":C: zero_out_sector_data enter :C:\n");
+    lock_acquire_re(&c_lock);
     cache_t idx = get_and_pin_block(sector);
-    lock_release(&cache_lock);
+    lock_release_re(&c_lock);
 
-    lock_acquire_re(&blocks_meta[idx].lock);
+    lock_acquire_re(&c_lock);
     memset(idx_to_ptr(idx), 0, BLOCK_SECTOR_SIZE);
     unpin(idx);
     set_unready(idx, false);
-    lock_release_re(&blocks_meta[idx].lock);
+    lock_release_re(&c_lock);
+    log_debug(":C: zero_out_sector_data exit :C:\n");
 }
 
 static
 cache_t get_and_lock_sector_data(block_sector_t sector) {
+    log_debug(":C: get_and_lock_sector_data enter :C:\n");
     ASSERT(sector < block_size(fs_device));
     // return locked block with data from sector
     // if not already in cache load into cache
@@ -422,46 +451,42 @@ cache_t get_and_lock_sector_data(block_sector_t sector) {
     // search for existing position
 
     // assures no other insertions are possible w/o our knowledge
-    lock_acquire(&cache_lock);
+    lock_acquire_re(&c_lock);
     cache_t i;
     for (i = 0; i < CACHE_SIZE; i++) {
         if (blocks_meta[i].sector == sector) {
-            lock_acquire_re(&blocks_meta[i].lock);
             // re-check
             if (blocks_meta[i].sector != sector) {
                 // somehow sector changed, no other
                 // concurrent thread will have requested a cache position for this
                 // sector so this is up to us
-                lock_release_re(&blocks_meta[i].lock);
                 break;
             } else if ((blocks_meta[i].state & UNREADY) != 0) {
                 // count how many threads are interested in this block
                 blocks_meta[i].refs += 1;
 
-                lock_release(&cache_lock);
+                //lock_release_re(&c_lock);
                 // wait until data is in cache
-                cond_wait(&blocks_meta[i].cond, &blocks_meta[i].lock);
+                cond_wait(&blocks_meta[i].cond, &c_lock);
 
                 blocks_meta[i].refs -= 1;
                 res = i;
                 goto entry_found;
             }
             res = i;
-            lock_release(&cache_lock);
             goto entry_found;
         }
     }
 
     // schedule read
     res = sched_read(sector);
+    ASSERT(res < CACHE_SIZE);
     // reference count is increase for our thread
     // this entry will be valid until ref is 0 again
 
-    lock_release(&cache_lock);
-    lock_acquire_re(&blocks_meta[res].lock);
     if ((blocks_meta[res].state & UNREADY) != 0) {
         // wait until data is in cache
-        cond_wait(&blocks_meta[res].cond, &blocks_meta[res].lock);
+        cond_wait(&blocks_meta[res].cond, &c_lock);
     }
     blocks_meta[i].refs -= 1;
 
@@ -469,6 +494,7 @@ entry_found:
     // sector is the correct one and data is available (due to cond)
     // and metadata lock is held
     ASSERT(res < CACHE_SIZE);
+    log_debug(":C: get_and_lock_sector_data exit :C:\n");
     return res;
 }
 
@@ -505,7 +531,7 @@ void in_cache_and_overwrite_block(block_sector_t  sector,
     memcpy(idx_to_ptr(ind)+ofs, data, length);
     set_dirty(ind, true);
     set_accessed(ind, true);
-    lock_release_re(&blocks_meta[ind].lock);
+    lock_release_re(&c_lock);
     if (print_hex) {
         hex_dump(ofs, idx_to_ptr(ind), length, false);
         printf("\n");
@@ -533,7 +559,7 @@ void in_cache_and_read(block_sector_t  sector,
     // to, from, length
     memcpy(data, idx_to_ptr(ind)+ofs, length);
     set_accessed(ind, true);
-    lock_release_re(&blocks_meta[ind].lock);
+    lock_release_re(&c_lock);
     if (print_hex) {
         hex_dump(ofs, data, length, false);
         printf("\n");
@@ -547,13 +573,13 @@ static
 void set_accessed (cache_t idx, bool accessed) {
     // valid range
     ASSERT(idx <= CACHE_SIZE);
-    lock_acquire_re(&blocks_meta[idx].lock);
+    lock_acquire_re(&c_lock);
     if (accessed) {
         blocks_meta[idx].state |= ACCESSED;
     } else {
         blocks_meta[idx].state &= ~ACCESSED;
     }
-    lock_release_re(&blocks_meta[idx].lock);
+    lock_release_re(&c_lock);
 }
 
 /*
@@ -563,13 +589,13 @@ static
 void set_dirty (cache_t idx, bool dirty) {
     // valid range
     ASSERT(idx <= CACHE_SIZE);
-    lock_acquire_re(&blocks_meta[idx].lock);
+    lock_acquire_re(&c_lock);
     if (dirty) {
         blocks_meta[idx].state |= DIRTY;
     } else {
         blocks_meta[idx].state &= ~DIRTY;
     }
-    lock_release_re(&blocks_meta[idx].lock);
+    lock_release_re(&c_lock);
 }
 
 /*
@@ -579,13 +605,13 @@ static
 void set_unready (cache_t idx, bool unready) {
     // valid range
     ASSERT(idx <= CACHE_SIZE);
-    lock_acquire_re(&blocks_meta[idx].lock);
+    lock_acquire_re(&c_lock);
     if (unready) {
         blocks_meta[idx].state |= UNREADY;
     } else {
         blocks_meta[idx].state &= ~UNREADY;
     }
-    lock_release_re(&blocks_meta[idx].lock);
+    lock_release_re(&c_lock);
 }
 
 /*
@@ -595,13 +621,13 @@ static
 void set_pin (cache_t idx, bool pin) {
     // valid range
     ASSERT(idx <= CACHE_SIZE);
-    lock_acquire_re(&blocks_meta[idx].lock);
+    lock_acquire_re(&c_lock);
     if (pin) {
         blocks_meta[idx].state |= PIN;
     } else {
         blocks_meta[idx].state &= ~PIN;
     }
-    lock_release_re(&blocks_meta[idx].lock);
+    lock_release_re(&c_lock);
 }
 
 /*

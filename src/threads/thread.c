@@ -576,6 +576,7 @@ schedule (void)
   if (cur != next)
     prev = switch_threads (cur, next);
   thread_schedule_tail (prev);
+  log_debug("SCHEDULE: %s\n",next->name);
 }
 
 /* Returns a tid to use for a new thread. */
