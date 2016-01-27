@@ -9,6 +9,9 @@
 #include "threads/vaddr.h"
 #include "vm/frames.h"
 
+// TODO DEBUG
+const bool print_hex = false;
+
 // static functions
 static cache_t get_and_lock_sector_data(block_sector_t sector);
 static void set_accessed (cache_t idx,
@@ -476,6 +479,10 @@ void in_cache_and_overwrite_block(block_sector_t  sector,
                               size_t          length) {
     ASSERT(sector < block_size(fs_device));
     ASSERT(ofs + length <= BLOCK_SECTOR_SIZE);
+    if (print_hex) {
+        hex_dump(ofs, data, length, false);
+        printf("\n");
+    }
 
     if (length == 0) {
         return;
@@ -489,6 +496,10 @@ void in_cache_and_overwrite_block(block_sector_t  sector,
     set_dirty(ind, true);
     set_accessed(ind, true);
     lock_release_re(&blocks_meta[ind].lock);
+    if (print_hex) {
+        hex_dump(ofs, idx_to_ptr(ind), length, false);
+        printf("\n");
+    }
 }
 
 /* analoge in_cache_and_overwrite_block but read */;
@@ -510,6 +521,10 @@ void in_cache_and_read(block_sector_t  sector,
     memcpy(data, idx_to_ptr(ind)+ofs, length);
     set_accessed(ind, true);
     lock_release_re(&blocks_meta[ind].lock);
+    if (print_hex) {
+        hex_dump(ofs, data, length, false);
+        printf("\n");
+    }
 }
 
 /*
