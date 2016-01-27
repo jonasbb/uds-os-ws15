@@ -166,6 +166,8 @@ void sched_background(void *aux UNUSED) {
                 lock_acquire_re(&blocks_meta[r->idx].lock);
                 // now ready as data is loaded and inform interrested parties
                 set_unready(r->idx, false);
+                // mark cache as reusable again
+                unpin(r->idx);
                 cond_broadcast(&blocks_meta[r->idx].cond, &blocks_meta[r->idx].lock);
                 lock_release_re(&blocks_meta[r->idx].lock);
             } else {
@@ -174,10 +176,10 @@ void sched_background(void *aux UNUSED) {
                             r->sector,
                             idx_to_ptr(r->idx));
                 set_dirty(r->idx, false);
+                // mark cache as reusable again
+                unpin(r->idx);
                 lock_release_re(&blocks_meta[r->idx].lock);
             }
-            // mark cache as reusable again
-            unpin(r->idx);
             lock_acquire_re_mult(&sched_lock, cnt);
             free(r);
             r = NULL;
