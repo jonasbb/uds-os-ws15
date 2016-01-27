@@ -261,7 +261,7 @@ inode_open (block_sector_t sector)
   lock_init(&(inode->lock));
   in_cache_and_read(inode->sector,
                     offsetof(struct inode_disk,start),
-                    inode + offsetof(struct inode,start),
+                    ((void*)inode) + offsetof(struct inode,start),
                     offsetof(struct inode_disk,unused2) - offsetof(struct inode_disk,start));
   return inode;
 }
