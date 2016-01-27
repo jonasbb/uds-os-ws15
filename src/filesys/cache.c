@@ -1,13 +1,16 @@
 #include "filesys/cache.h"
+#include <list.h>
 #include <string.h>
 #include <round.h>
 #include "filesys/filesys.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
+#include "threads/malloc.h"
 #include "threads/vaddr.h"
+#include "vm/frames.h"
 
 // static functions
-cache_t get_and_lock_sector_data(block_sector_t sector);
+static cache_t get_and_lock_sector_data(block_sector_t sector);
 static void set_accessed (cache_t idx,
                           bool    accessed);
 static void set_dirty (cache_t idx,
@@ -17,14 +20,14 @@ static void set_pin (cache_t idx,
 static void set_unready (cache_t idx,
                          bool    unready);
 static void pin (cache_t idx);
-void *idx_to_ptr(cache_t idx);
+static void *idx_to_ptr(cache_t idx);
 
 /***********************************************************
  * Configuration / Data for cache
  ***********************************************************/
 
 // Maximal number of pages
-const cache_t CACHE_SIZE = 64;
+#define CACHE_SIZE ((cache_t)64)
 const cache_t NOT_IN_CACHE = 0xFF;
 const block_sector_t NO_SECTOR = 0xFFFFFFFF;
 
@@ -38,6 +41,7 @@ typedef uint8_t cache_state_t;
 
 struct cache_entry {
     volatile block_sector_t sector;
+    uint16_t refs;
     cache_state_t state;
     struct lock lock;
     struct condition cond;
@@ -45,13 +49,11 @@ struct cache_entry {
 
 // lock for datastructures
 struct lock cache_lock;
-// message system to inform about newly read blocks
-struct condition block_read;
 
 // array of actual blocks
-void *blocks;
+void *blocks[CACHE_SIZE];
 // array of metadata for cache entries
-struct cache_entry blocks_meta[];
+struct cache_entry *blocks_meta;
 // next block to check for eviction
 volatile cache_t evict_ptr;
 
@@ -63,21 +65,28 @@ volatile cache_t evict_ptr;
  * scheduler
  ***********************************************************/
 // function declaraions
+static
 bool request_item_less_func (const struct list_elem *a_,
                              const struct list_elem *b_,
                              void *aux);
-void sched_read_do(block_sector_t sector, bool isprefetch);
+static
 struct request_item *sched_contains_req(block_sector_t sector,
                                         bool           read);
+static
 void sched_init(void);
+static
 void sched_background(void *aux UNUSED);
+static
 cache_t sched_read(block_sector_t sector);
+static
 cache_t sched_read_do(block_sector_t sector,
                       bool           isprefetch);
+static
 void sched_write(block_sector_t sector,
                  cache_t        idx);
-cache_t sched_insert(block_sector_t sector,
-                     cache_t        cache_idx);
+static
+struct request_item *sched_insert(block_sector_t sector,
+                                  cache_t        cache_idx);
 
 struct lock sched_lock;
 struct list sched_outstanding_requests;
@@ -88,14 +97,14 @@ struct request_item {
     struct condition cond;
     cache_t idx;
     bool read;
-}
+};
 
 static
 bool request_item_less_func (const struct list_elem *a_,
                              const struct list_elem *b_,
-                             void *aux) {
-    struct request_item *a = list_elem(a_, struct request_item, elem);
-    struct request_item *b = list_elem(b_, struct request_item, elem);
+                             void *aux UNUSED) {
+    struct request_item *a = list_entry(a_, struct request_item, elem);
+    struct request_item *b = list_entry(b_, struct request_item, elem);
     return a->sector < b->sector;
 }
 
@@ -104,8 +113,8 @@ struct request_item *sched_contains_req(block_sector_t sector,
     lock_acquire_re(&sched_lock);
     struct request_item *res = NULL;
     struct list_elem *e;
-    for (e = list_begin (&process_states[pid].fdlist);
-         e != list_end (&process_states[pid].fdlist);
+    for (e = list_begin (&sched_outstanding_requests);
+         e != list_end (&sched_outstanding_requests);
          e = list_next (e)) {
         struct request_item *r = list_entry (e, struct request_item, elem);
         if (r->sector == sector && r->read == read) {
@@ -143,7 +152,7 @@ void sched_background(void *aux UNUSED) {
              e = list_next(e)) {
 
             r = list_entry (e, struct request_item, elem);
-            list_remove(&sched_outstanding_requests, e);
+            list_remove(e);
             int cnt = lock_release_re_mult(&sched_lock);
             // perform block operation
             if (r->read) {
@@ -167,10 +176,10 @@ void sched_background(void *aux UNUSED) {
             unpin(r->idx);
             lock_acquire_re_mult(&sched_lock, cnt);
             // notify interested parties about success
-            cond_broadcast(r->cond, &sched_lock);
+            cond_broadcast(&r->cond, &sched_lock);
             free(e);
             e = NULL;
-            r = NULL
+            r = NULL;
         }
         if (!list_empty(&sched_outstanding_requests)) {
             continue;
@@ -188,7 +197,7 @@ cache_t sched_read(block_sector_t sector) {
     cache_t res;
     res = sched_read_do(sector, false);
     lock_acquire_re(&blocks_meta[res].lock);
-    &blocks_meta[res].refs += 1;
+    blocks_meta[res].refs += 1;
     lock_release_re(&blocks_meta[res].lock);
     lock_release_re(&sched_lock);
     return res;
@@ -198,15 +207,16 @@ static
 cache_t sched_read_do(block_sector_t sector,
                       bool           isprefetch) {
     lock_acquire_re(&sched_lock);
-    cache_t res;
+    struct request_item *res;
     if ((res = sched_contains_req(sector, true)) == NULL) {
         res = sched_insert(sector, NOT_IN_CACHE);
     }
     if (!isprefetch && sched_contains_req(sector+1, true) == NULL) {
         sched_insert(sector+1, NOT_IN_CACHE);
     }
+    cache_t r = res->idx;
     lock_release_re(&sched_lock);
-    return res;
+    return r;
 }
 
 /*
@@ -257,30 +267,28 @@ void sched_write(block_sector_t sector,
 }*/
 
 static
-cache_t sched_insert(block_sector_t sector,
-                     cache_t        cache_idx) {
+struct request_item *sched_insert(block_sector_t sector,
+                                  cache_t        cache_idx) {
     lock_acquire_re(&sched_lock);
-    cache_t res;
     struct request_item *r = malloc(sizeof(*r));
     ASSERT(r != NULL);
     r->sector = sector;
     r->read = cache_idx == NOT_IN_CACHE;
-    cond_init(r->cond);
+    cond_init(&r->cond);
     if (cache_idx == NOT_IN_CACHE) {
         r->idx = get_and_pin_block(sector);
     } else {
         r->idx = cache_idx;
     }
-    res = r->idx;
 
     // add to queue
     list_insert_ordered(&sched_outstanding_requests,
-                        r,
+                        &r->elem,
                         request_item_less_func,
-                        void);
+                        NULL);
     cond_broadcast(&sched_new_requests_cond, &sched_lock);
     lock_release_re(&sched_lock);
-    return res;
+    return r;
 }
 /***********************************************************
  * scheduler END
@@ -295,16 +303,30 @@ void cache_init() {
 
     // reserve memory for actual blocks
     size_t numpages = DIV_ROUND_UP(CACHE_SIZE * BLOCK_SECTOR_SIZE, PGSIZE);
-    // TODO get consecutive pages from pool
+    int i;
+    for (i = 0; i < CACHE_SIZE; i+=8) {
+        void *page = frame_get_free();
+        ASSERT(page != NULL);
+        blocks[i+0] = page + 0 * BLOCK_SECTOR_SIZE;
+        blocks[i+1] = page + 1 * BLOCK_SECTOR_SIZE;
+        blocks[i+2] = page + 2 * BLOCK_SECTOR_SIZE;
+        blocks[i+3] = page + 3 * BLOCK_SECTOR_SIZE;
+        blocks[i+4] = page + 4 * BLOCK_SECTOR_SIZE;
+        blocks[i+5] = page + 5 * BLOCK_SECTOR_SIZE;
+        blocks[i+6] = page + 6 * BLOCK_SECTOR_SIZE;
+        blocks[i+7] = page + 7 * BLOCK_SECTOR_SIZE;
+    }
 
     // reserve metadata memory
     numpages = DIV_ROUND_UP(CACHE_SIZE * sizeof(struct cache_entry), PGSIZE);
-    // TODO get consecutive pages from pool
+    ASSERT(numpages == 1);
+    blocks_meta = frame_get_free();
+    ASSERT(blocks_meta != NULL);
 
-    cache_t i;
     for (i = 0; i < CACHE_SIZE; i++) {
         blocks_meta[i].sector = NO_SECTOR;
         blocks_meta[i].state = 0;
+        blocks_meta[i].refs = 0;
         lock_init(&blocks_meta[i].lock);
         cond_init(&blocks_meta[i].cond);
     }
@@ -365,7 +387,7 @@ done:
 }
 
 /* Set a whole block to only zeros */
-cache_t zero_out_sector_data(block_sector_t) {
+void zero_out_sector_data(block_sector_t sector) {
     lock_acquire(&cache_lock);
     cache_t idx = get_and_pin_block(sector);
     lock_release(&cache_lock);
@@ -399,7 +421,7 @@ cache_t get_and_lock_sector_data(block_sector_t sector) {
                 // sector so this is up to us
                 lock_release_re(&blocks_meta[i].lock);
                 break;
-            } else if (blocks_meta[i].state & UNREADY != 0) {
+            } else if ((blocks_meta[i].state & UNREADY) != 0) {
                 // count how many threads are interested in this block
                 blocks_meta[i].refs += 1;
 
@@ -424,7 +446,7 @@ cache_t get_and_lock_sector_data(block_sector_t sector) {
 
     lock_release(&cache_lock);
     lock_acquire_re(&blocks_meta[res].lock);
-    if (blocks_meta[res].state & UNREADY != 0) {
+    if ((blocks_meta[res].state & UNREADY) != 0) {
         // wait until data is in cache
         cond_wait(&blocks_meta[res].cond, &blocks_meta[res].lock);
     }
@@ -567,5 +589,5 @@ static
 void *idx_to_ptr(cache_t idx) {
     // valid range
     ASSERT(idx <= CACHE_SIZE);
-    return blocks + idx * BLOCK_SECTOR_SIZE;
+    return blocks[idx];
 }
