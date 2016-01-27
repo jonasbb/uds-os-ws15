@@ -190,6 +190,8 @@ void sched_background(void *aux UNUSED) {
 /* Increases reference count on new block */
 static
 cache_t sched_read(block_sector_t sector) {
+    ASSERT(sector < block_size(fs_device));
+
     lock_acquire_re(&sched_lock);
     cache_t res;
     res = sched_read_do(sector, false);
@@ -379,6 +381,7 @@ cont:
     }
 done:
     lock_release_re(&blocks_meta[ptr].lock);
+    ASSERT(ptr < CACHE_SIZE);
     return ptr;
 }
 
@@ -451,6 +454,7 @@ cache_t get_and_lock_sector_data(block_sector_t sector) {
 entry_found:
     // sector is the correct one and data is available (due to cond)
     // and metadata lock is held
+    ASSERT(res < CACHE_SIZE);
     return res;
 }
 
