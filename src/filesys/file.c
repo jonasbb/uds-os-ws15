@@ -237,8 +237,6 @@ file_deconstruct_path (const char   *path,
   }
   token_next = strtok_r(NULL, "/", &save_ptr);
   while(token_next != NULL) {
-
-
     if (strcmp(token, ".") == 0) {
       goto next;
     }
@@ -250,7 +248,6 @@ file_deconstruct_path (const char   *path,
     if (!dir_lookup(dir, token, &inode)) {
       break;
     }
-
     dir = dir_open_with_parent(inode, dir);
 
 next:
@@ -265,7 +262,11 @@ next:
 
   if (file) {
     if (dir_lookup(dir, token, &inode)) {
-      f = file_open(inode);
+      if (inode_isdir(inode)) {
+        f = dir_open_with_parent(inode, dir);
+      } else {
+        f = file_open(inode);
+      }
     }
   }
 
