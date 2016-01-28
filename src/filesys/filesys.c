@@ -73,14 +73,11 @@ filesys_create (const char *path,
 struct file *
 filesys_open (const char *name)
 {
-  struct file *dir = dir_open_root ();
-  struct inode *inode = NULL;
-
-  if (dir != NULL)
-    dir_lookup (dir, name, &inode);
-  dir_close (dir);
-
-  return file_open (inode);
+  struct file* file;
+  if(!file_deconstruct_path(name, NULL,&file, NULL)) {
+    return NULL;
+  }
+  return file;
 }
 
 /* Deletes the file named NAME.

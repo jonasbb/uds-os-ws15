@@ -231,21 +231,20 @@ file_deconstruct_path (const char   *path,
   }
 
   // parse string
-  token_next = strtok_r(s, "/", &save_ptr);
-  if (!token_next) {
-    return false;
+  token = strtok_r(s, "/", &save_ptr);
+  if (!token) {
+    goto done;
   }
-
+  token_next = strtok_r(NULL, "/", &save_ptr);
   while(token_next != NULL) {
-    token = token_next;
-    token_next = strtok_r(NULL, "/", &save_ptr);
+
 
     if (strcmp(token, ".") == 0) {
-      continue;
+      goto next;
     }
     if (strcmp(token, "..") == 0) {
       dir = dir_pop(dir);
-      continue;
+      goto next;
     }
 
     if (!dir_lookup(dir, token, &inode)) {
@@ -253,12 +252,15 @@ file_deconstruct_path (const char   *path,
     }
 
     dir = dir_open_with_parent(inode, dir);
+
+next:
+    token = token_next;
+    token_next = strtok_r(NULL, "/", &save_ptr);
   }
 
   if (strtok_r(NULL, "/", &save_ptr) != NULL) {
     // not all tokens processed, there is an error
-    dir_close(dir);
-    return false;
+    goto done;
   }
 
   if (file) {
@@ -286,4 +288,7 @@ file_deconstruct_path (const char   *path,
   }
 
   return true;
+done:
+    dir_close(dir);
+    return false;
 }
