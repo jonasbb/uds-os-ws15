@@ -90,6 +90,16 @@ current size of the file.
 
 >> B2: Describe your code for traversing a user-specified path.  How
 >> do traversals of absolute and relative paths differ?
+Due to the fact that very directory has a parent directory, we chose
+a "stack-like" way of traversals. So we have a list of directories
+to work with. At every step we have three possibilities: The first is to
+stay in the current directory (with .), the second one is to go one layer
+above (with ..) and a third one where we go one layer down (with a
+directory name).
+For us there is no difference between the traversal of absolute and
+relative paths except for the starting point. For a absolute path this is
+always the root directory and for relative path it's the current working
+directory.
 
 ---- SYNCHRONIZATION ----
 
