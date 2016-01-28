@@ -27,7 +27,12 @@ void file_seek (struct file *, off_t);
 off_t file_tell (struct file *);
 off_t file_length (struct file *);
 
-bool file_isdir(struct file *);
 int file_get_inumber(struct file *);
+bool file_isdir (struct file *);
+bool file_isroot (struct file *);
+bool file_deconstruct_path (const char   *path,
+                            struct file **parent,
+                            struct file **file,
+                            char        **filename);
 
 #endif /* filesys/file.h */

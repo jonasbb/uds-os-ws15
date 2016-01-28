@@ -6,6 +6,7 @@
 #include <list.h>
 #include <stdint.h>
 #include "userprog/process.h"
+#include "filesys/directory.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -107,7 +108,7 @@ struct thread
     
     // current working directory
     // use for filesys
-    struct dir *current_work_dir;
+    struct file *current_work_dir;
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */

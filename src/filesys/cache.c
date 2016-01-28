@@ -1,5 +1,6 @@
 #include "filesys/cache.h"
 #include <list.h>
+#include <stdio.h>
 #include <string.h>
 #include <round.h>
 #include "filesys/filesys.h"
