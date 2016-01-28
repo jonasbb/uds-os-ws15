@@ -57,19 +57,21 @@ struct inode
 static block_sector_t
 byte_to_sector (struct inode *inode, off_t pos)
 {
-  log_debug("!!!byte_to_sector!!!\n");
+  log_debug("!!!byte_to_sector, inode->start: %d, pos: %d!!!\n", inode ->start, pos);
   block_sector_t sector;
   ASSERT (inode != NULL);
-  in_cache_and_read(inode->start,
+    in_cache_and_read(inode->start,
                     (pos/(128*BLOCK_SECTOR_SIZE))*sizeof(block_sector_t),
                     &sector,
                     sizeof(sector));
-  if (sector == NON_EXISTANT) return sector;
+  ASSERT(sector < block_size(fs_device));
+    if (sector == NON_EXISTANT) return sector;
   in_cache_and_read(sector,
-                    (pos%(128*BLOCK_SECTOR_SIZE))*sizeof(block_sector_t)/BLOCK_SECTOR_SIZE
+                    (pos%(128*BLOCK_SECTOR_SIZE))/BLOCK_SECTOR_SIZE*sizeof(block_sector_t)
                     ,
                     &sector,
                     sizeof(sector));
+    ASSERT(sector < block_size(fs_device));
   return sector;
 }
 
@@ -113,14 +115,14 @@ byte_to_sector_expand (struct inode *inode, off_t pos)
 step2:
   tmp = sector;
   in_cache_and_read(tmp,
-                    (pos%(128*BLOCK_SECTOR_SIZE))*sizeof(block_sector_t)/BLOCK_SECTOR_SIZE,
+                    (pos%(128*BLOCK_SECTOR_SIZE))/BLOCK_SECTOR_SIZE*sizeof(block_sector_t),
                     &sector,
                     sizeof(sector));
   if (sector == NON_EXISTANT) {
     lock_acquire(&inode->lock);
     /* Revalidate still not existant */
     in_cache_and_read(tmp,
-                    (pos%(128*BLOCK_SECTOR_SIZE))*sizeof(block_sector_t)/BLOCK_SECTOR_SIZE,
+                    (pos%(128*BLOCK_SECTOR_SIZE))/BLOCK_SECTOR_SIZE*sizeof(block_sector_t),
                     &sector,
                     sizeof(sector));
     /* Already added, no need anymore */
@@ -134,13 +136,13 @@ step2:
     }
     zero_out_sector_data(sector);
     in_cache_and_overwrite_block(tmp,
-                    (pos%(128*BLOCK_SECTOR_SIZE))*sizeof(block_sector_t)/BLOCK_SECTOR_SIZE,
+                    (pos%(128*BLOCK_SECTOR_SIZE))/BLOCK_SECTOR_SIZE*sizeof(block_sector_t),
                     &sector,
                     sizeof(sector));
     lock_release(&inode->lock);
   }
 end:
-
+  ASSERT(sector < block_size(fs_device));
   return sector;
 }
 
@@ -223,6 +225,7 @@ inode_create (block_sector_t sector, off_t length, bool is_dir)
         }
       free (disk_inode);
     }
+  ASSERT(sector < block_size(fs_device));
   return success;
 }
 
