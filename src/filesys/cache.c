@@ -499,6 +499,7 @@ void in_cache_and_overwrite_block(block_sector_t  sector,
                               size_t          ofs,
                               void           *data,
                               size_t          length) {
+    lock_acquire_re(&block_meta_lock);
     if (!(ofs + length <= BLOCK_SECTOR_SIZE)) {
         printf("ofs %d, length %d, BLOCK_SECTOR_SIZE %d\n", ofs, length, BLOCK_SECTOR_SIZE);
     }
@@ -532,6 +533,7 @@ void in_cache_and_overwrite_block(block_sector_t  sector,
         hex_dump(ofs, idx_to_ptr(ind), length, false);
         printf("\n");
     }
+    lock_release_re(&block_meta_lock);
 }
 
 /* analoge in_cache_and_overwrite_block but read */;
@@ -539,6 +541,7 @@ void in_cache_and_read(block_sector_t  sector,
                        size_t          ofs,
                        void           *data,
                        size_t          length) {
+    lock_acquire_re(&block_meta_lock);
     if (!(ofs + length <= BLOCK_SECTOR_SIZE)) {
         printf("ofs %d, length %d, BLOCK_SECTOR_SIZE %d\n", ofs, length, BLOCK_SECTOR_SIZE);
     }
@@ -566,6 +569,7 @@ void in_cache_and_read(block_sector_t  sector,
         hex_dump(ofs, data, length, false);
         printf("\n");
     }
+    lock_release_re(&block_meta_lock);
 }
 
 /*
