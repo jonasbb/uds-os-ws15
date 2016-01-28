@@ -262,12 +262,12 @@ inode_open (block_sector_t sector)
   /* Initialize. */
 
   list_push_front (&open_inodes, &inode->elem);
+  lock_init(&(inode->lock));
   inode->sector = sector;
   lock_release(&inode_list_lock);
   inode->open_cnt = 1;
   inode->deny_write_cnt = 0;
   inode->removed = false;
-  lock_init(&(inode->lock));
   in_cache_and_read(inode->sector,
                     offsetof(struct inode_disk,start),
                     ((void*)inode) + offsetof(struct inode,start),
