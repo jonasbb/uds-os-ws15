@@ -95,7 +95,7 @@ filesys_remove (const char *path)
     return false;
   }
   bool success = !file_isroot(f) && dir_remove (dir, fname);
-  dir_close (dir); 
+  dir_close (dir);
   if (file_isdir(f)) {
     file_close(f);
   } else {

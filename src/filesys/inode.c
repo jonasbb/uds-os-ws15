@@ -264,10 +264,11 @@ inode_open (block_sector_t sector)
   list_push_front (&open_inodes, &inode->elem);
   lock_init(&(inode->lock));
   inode->sector = sector;
-  lock_release(&inode_list_lock);
   inode->open_cnt = 1;
   inode->deny_write_cnt = 0;
   inode->removed = false;
+  lock_release(&inode_list_lock);
+
   in_cache_and_read(inode->sector,
                     offsetof(struct inode_disk,start),
                     ((void*)inode) + offsetof(struct inode,start),
@@ -298,6 +299,18 @@ inode_get_inumber (struct inode *inode)
   lock_release(&inode->lock);
   return tmp;
 }
+
+
+bool
+inode_get_removed (struct inode *inode)
+{
+  log_debug("!!!inode_get_removed!!!\n");
+  lock_acquire(&inode->lock);
+  bool tmp = inode->removed;
+  lock_release(&inode->lock);
+  return tmp;
+}
+
 
 /* Returns INODE's inode number. */
 bool

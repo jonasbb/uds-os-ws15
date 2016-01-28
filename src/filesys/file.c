@@ -216,7 +216,6 @@ file_deconstruct_path (const char   *path,
                        char        *filename[NAME_MAX + 1]) {
   char s[strlen(path) + 1];
   memcpy(s, path, strlen(path) + 1);
-
   char *save_ptr, *token, *token_next;
   // token_next contains always the last processed part of the string,
   // which may be the non-existant new filename
@@ -227,16 +226,20 @@ file_deconstruct_path (const char   *path,
   if(s[0] == '/' || !thread_current()->current_work_dir) {
     dir = dir_open_root();
   } else {
+    if (inode_get_removed(thread_current()->current_work_dir->inode)) {
+      return false;
+    }
     dir = dir_reopen(thread_current()->current_work_dir);
-  }
 
-  // parse string
+  }
+      // parse string
   token = strtok_r(s, "/", &save_ptr);
   if (!token) {
-    goto done;
+    goto after_loop;
   }
   token_next = strtok_r(NULL, "/", &save_ptr);
   while(token_next != NULL) {
+
     if (strcmp(token, ".") == 0) {
       goto next;
     }
@@ -260,16 +263,22 @@ next:
     goto done;
   }
 
+after_loop:
   if (file) {
-    if (dir_lookup(dir, token, &inode)) {
-      if (inode_isdir(inode)) {
-        f = dir_open_with_parent(inode, dir);
+    if (!token) {
+      f = dir_open_root();
+    } else if (strcmp(token, ".") == 0) {
+      f = dir_reopen(dir);
+    } else if (strcmp(token, "..") == 0) {
+      f = dir_reopen(dir->parent);
+    } else if (dir_lookup(dir, token, &inode)) {
+        if (inode_isdir(inode)) {
+         f = dir_open_with_parent(inode, dir);
       } else {
         f = file_open(inode);
       }
     }
   }
-
   ASSERT(file_isdir(dir));
   // set return values
   if (parent) {
@@ -287,7 +296,6 @@ next:
   if (filename) {
     memcpy(*filename, token, strlen(token) + 1);
   }
-
   return true;
 done:
     dir_close(dir);
