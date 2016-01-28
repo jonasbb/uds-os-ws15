@@ -244,6 +244,8 @@ syscall_chdir(const char* file_name) {
     dir_close(thread_current()->current_work_dir);
     thread_current()->current_work_dir = file;
     return true;
+  } else {
+    file_close(file);
   }
   return false;
 }
