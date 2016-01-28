@@ -29,6 +29,15 @@ Lukas Krämer <lkraemer@mmci.uni-saarland.de>
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+struct file
+  {
+    struct inode *inode;        /* File's inode. */
+    off_t pos;                  /* Current position. */
+    bool deny_write;            /* Has file_deny_write() been called? */
+    struct file *parent;        /* parent node */
+  };
+  We need this because in our design files and directories are the "same".
+
 >> A2: What is the maximum size of a file supported by your inode
 >> structure?  Show your work.
 The maximum size of a file supported by our inode structure is 8mb.
