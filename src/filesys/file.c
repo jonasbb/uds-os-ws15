@@ -223,16 +223,18 @@ file_deconstruct_path (const char   *path,
   if (strlen(path)==0) {
     return false;
   }
+   //printf("PATH: %s\n", path);
   struct file *dir, *f = NULL;
   struct inode *inode;
   if(s[0] == '/' || !thread_current()->current_work_dir) {
-
     dir = dir_open_root();
 
   } else {
+
     if (inode_get_removed(thread_current()->current_work_dir->inode)) {
       return false;
     }
+
     dir = dir_reopen(thread_current()->current_work_dir);
 
   }
@@ -243,7 +245,9 @@ file_deconstruct_path (const char   *path,
   }
   token_next = strtok_r(NULL, "/", &save_ptr);
   while(token_next != NULL) {
-
+    if (strlen(token_next) > NAME_MAX) {
+      goto done;
+    }
     if (strcmp(token, ".") == 0) {
       goto next;
     }

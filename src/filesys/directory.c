@@ -70,15 +70,22 @@ dir_open_root (void)
 struct file *
 dir_reopen (struct file *dir)
 {
-  struct file *tmp = dir_open (inode_reopen (dir->inode));
+     printf("REA00, ptr: %p!\n", dir->inode);
+  struct inode *i = inode_reopen (dir->inode);
+  struct file *tmp = dir_open (i);
+     printf("REA10!\n");
   ASSERT(tmp != NULL);
   if (!file_isroot(dir)) {
+       printf("REA20!\n");
     // NOT ROOT YET
     tmp->parent = dir_reopen(dir->parent);
+       printf("REA30!\n");
   } else {
     // dir == ROOT_NODE
+       printf("REA40!\n");
     tmp->parent = tmp;
   }
+     printf("REA50!\n");
   return tmp;
 }
 
@@ -141,7 +148,7 @@ dir_lookup (const struct file *dir, const char *name,
             struct inode **inode) 
 {
   struct file_entry e;
-
+  inode_acquire(dir->inode);
   ASSERT (dir != NULL);
   ASSERT (name != NULL);
 
@@ -149,7 +156,7 @@ dir_lookup (const struct file *dir, const char *name,
     *inode = inode_open (e.inode_sector);
   else
     *inode = NULL;
-
+  inode_release(dir->inode);
   return *inode != NULL;
 }
 
@@ -173,6 +180,7 @@ dir_add (struct file *dir, const char *name, block_sector_t inode_sector)
   if (*name == '\0' || strlen (name) > NAME_MAX)
     return false;
 
+  inode_acquire(dir->inode);
   /* Check that NAME is not in use. */
   if (lookup (dir, name, NULL, NULL))
     goto done;
@@ -196,6 +204,7 @@ dir_add (struct file *dir, const char *name, block_sector_t inode_sector)
   success = inode_write_at (dir->inode, &e, sizeof e, ofs) == sizeof e;
 
  done:
+  inode_release(dir->inode);
   return success;
 }
 
@@ -213,6 +222,7 @@ dir_remove (struct file *dir, const char *name)
   ASSERT (dir != NULL);
   ASSERT (name != NULL);
 
+  inode_acquire(dir->inode);
   /* Find directory entry. */
   if (!lookup (dir, name, &e, &ofs))
     goto done;
@@ -232,6 +242,7 @@ dir_remove (struct file *dir, const char *name)
   success = true;
 
  done:
+  inode_release(dir->inode);
   inode_close (inode);
   return success;
 }

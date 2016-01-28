@@ -88,7 +88,7 @@ byte_to_sector_expand (struct inode *inode, off_t pos)
                     sizeof(sector));
   ASSERT(sector < block_size(fs_device));
   if (sector == NON_EXISTANT) {
-    lock_acquire(&inode->lock);
+    lock_acquire_re(&inode->lock);
     /* Revalidate still not existant */
     in_cache_and_read(inode->start,
                     (pos/(128*BLOCK_SECTOR_SIZE))*sizeof(block_sector_t),
@@ -96,11 +96,11 @@ byte_to_sector_expand (struct inode *inode, off_t pos)
                     sizeof(sector));
     /* Already added, no need anymore */
     if (sector != NON_EXISTANT) {
-      lock_release(&inode->lock);
+      lock_release_re(&inode->lock);
       goto step2;
     }
     if (!free_map_allocate(1, &sector)){
-      lock_release(&inode->lock);
+      lock_release_re(&inode->lock);
       return NON_EXISTANT;
     }
 
@@ -109,7 +109,7 @@ byte_to_sector_expand (struct inode *inode, off_t pos)
                     (pos/(128*BLOCK_SECTOR_SIZE))*sizeof(block_sector_t),
                     &sector,
                     sizeof(sector));
-    lock_release(&inode->lock);
+    lock_release_re(&inode->lock);
   }
 
 step2:
@@ -119,7 +119,7 @@ step2:
                     &sector,
                     sizeof(sector));
   if (sector == NON_EXISTANT) {
-    lock_acquire(&inode->lock);
+    lock_acquire_re(&inode->lock);
     /* Revalidate still not existant */
     in_cache_and_read(tmp,
                     (pos%(128*BLOCK_SECTOR_SIZE))/BLOCK_SECTOR_SIZE*sizeof(block_sector_t),
@@ -127,11 +127,11 @@ step2:
                     sizeof(sector));
     /* Already added, no need anymore */
     if (sector != NON_EXISTANT) {
-      lock_release(&inode->lock);
+      lock_release_re(&inode->lock);
       goto end;
     }
     if (!free_map_allocate(1,&sector)) {
-      lock_release(&inode->lock);
+      lock_release_re(&inode->lock);
       return NON_EXISTANT;
     }
     zero_out_sector_data(sector);
@@ -139,7 +139,7 @@ step2:
                     (pos%(128*BLOCK_SECTOR_SIZE))/BLOCK_SECTOR_SIZE*sizeof(block_sector_t),
                     &sector,
                     sizeof(sector));
-    lock_release(&inode->lock);
+    lock_release_re(&inode->lock);
   }
 end:
   ASSERT(sector < block_size(fs_device));
@@ -239,7 +239,7 @@ inode_open (block_sector_t sector)
   struct list_elem *e;
   struct inode *inode;
 
-  lock_acquire(&inode_list_lock);
+  lock_acquire_re(&inode_list_lock);
   /* Check whether this inode is already open. */
   for (e = list_begin (&open_inodes); e != list_end (&open_inodes);
        e = list_next (e)) 
@@ -248,7 +248,7 @@ inode_open (block_sector_t sector)
       if (inode->sector == sector) 
         {
           inode_reopen (inode);
-          lock_release(&inode_list_lock);
+          lock_release_re(&inode_list_lock);
           return inode; 
         }
     }
@@ -256,7 +256,7 @@ inode_open (block_sector_t sector)
   /* Allocate memory. */
   inode = malloc (sizeof *inode);
   if (inode == NULL) {
-    lock_release(&inode_list_lock);
+    lock_release_re(&inode_list_lock);
     return NULL;
   }
   /* Initialize. */
@@ -267,7 +267,7 @@ inode_open (block_sector_t sector)
   inode->open_cnt = 1;
   inode->deny_write_cnt = 0;
   inode->removed = false;
-  lock_release(&inode_list_lock);
+  lock_release_re(&inode_list_lock);
 
   in_cache_and_read(inode->sector,
                     offsetof(struct inode_disk,start),
@@ -282,9 +282,14 @@ inode_reopen (struct inode *inode)
 {
   log_debug("!!!inode_reopen!!!\n");
   if (inode != NULL) {
-    lock_acquire(&inode->lock);
+    if (inode == 0xc0040568) {
+      printf("inode lock: %p\n", &inode->lock);
+      printf("%d\n", lock_try_acquire_re(&inode->lock));
+
+    }
+    lock_acquire_re(&inode->lock);
     inode->open_cnt++;
-    lock_release(&inode->lock);
+    lock_release_re(&inode->lock);
   }
   return inode;
 }
@@ -294,9 +299,9 @@ block_sector_t
 inode_get_inumber (struct inode *inode)
 {
   log_debug("!!!inode_get_inumber!!!\n");
-  lock_acquire(&inode->lock);
+  lock_acquire_re(&inode->lock);
   block_sector_t tmp = inode->sector;
-  lock_release(&inode->lock);
+  lock_release_re(&inode->lock);
   return tmp;
 }
 
@@ -305,9 +310,9 @@ bool
 inode_get_removed (struct inode *inode)
 {
   log_debug("!!!inode_get_removed!!!\n");
-  lock_acquire(&inode->lock);
+  lock_acquire_re(&inode->lock);
   bool tmp = inode->removed;
-  lock_release(&inode->lock);
+  lock_release_re(&inode->lock);
   return tmp;
 }
 
@@ -317,9 +322,9 @@ bool
 inode_isdir (struct inode *inode)
 {
   log_debug("!!!inode_isdir!!!\n");
-  lock_acquire(&inode->lock);
+  lock_acquire_re(&inode->lock);
   bool tmp = inode->is_dir;
-  lock_release(&inode->lock);
+  lock_release_re(&inode->lock);
   return tmp;
 }
 
@@ -334,15 +339,15 @@ inode_close (struct inode *inode)
   if (inode == NULL)
     return;
 
-  lock_acquire(&inode->lock);
-  /* Release resources if this was the last opener. */
+  lock_acquire_re(&inode->lock);
+  /* Release_Re resources if this was the last opener. */
   if (--inode->open_cnt == 0)
     {
       log_debug("Close inode %d.\n", inode->sector);
-      lock_acquire(&inode_list_lock);
-      /* Remove from inode list and release lock. */
+      lock_acquire_re(&inode_list_lock);
+      /* Remove from inode list and release_re lock. */
       list_remove (&inode->elem);
-      lock_release(&inode_list_lock);
+      lock_release_re(&inode_list_lock);
       /* Deallocate blocks if removed. */
       if (inode->removed)
         {
@@ -366,7 +371,7 @@ inode_close (struct inode *inode)
       free (inode);
       return;
     }
-  lock_release(&inode->lock);
+  lock_release_re(&inode->lock);
 }
 
 /* Marks INODE to be deleted when it is closed by the last caller who
@@ -376,9 +381,9 @@ inode_remove (struct inode *inode)
 {
   log_debug("!!!inode_remove!!!\n");
   ASSERT (inode != NULL);
-  lock_acquire(&inode->lock);
+  lock_acquire_re(&inode->lock);
   inode->removed = true;
-  lock_release(&inode->lock);
+  lock_release_re(&inode->lock);
 }
 
 /* Reads SIZE bytes from INODE into BUFFER, starting at position OFFSET.
@@ -442,12 +447,12 @@ inode_write_at (struct inode *inode, void *buffer_, off_t size,
   off_t bytes_written = 0;
   off_t o_offset = offset;
 
-  lock_acquire(&inode->lock);
+  lock_acquire_re(&inode->lock);
   if (inode->deny_write_cnt) {
-     lock_release(&inode->lock);
+     lock_release_re(&inode->lock);
      return 0;
   }
-  lock_release(&inode->lock);
+  lock_release_re(&inode->lock);
 
   while (size > 0)
     {
@@ -476,10 +481,10 @@ inode_write_at (struct inode *inode, void *buffer_, off_t size,
       bytes_written += chunk_size;
     }
 
-  lock_acquire(&inode->lock);
+  lock_acquire_re(&inode->lock);
   inode->length = inode->length > o_offset + bytes_written ?
                   inode->length : o_offset + bytes_written ;
-  lock_release(&inode->lock);
+  lock_release_re(&inode->lock);
 
   return bytes_written;
 }
@@ -490,10 +495,10 @@ void
 inode_deny_write (struct inode *inode)
 {
   log_debug("!!!inode_deny_write!!!\n");
-  lock_acquire(&inode->lock);
+  lock_acquire_re(&inode->lock);
   inode->deny_write_cnt++;
   ASSERT (inode->deny_write_cnt <= inode->open_cnt);
-  lock_release(&inode->lock);
+  lock_release_re(&inode->lock);
 }
 
 /* Re-enables writes to INODE.
@@ -503,11 +508,11 @@ void
 inode_allow_write (struct inode *inode)
 {
   log_debug("!!!inode_allow_write!!!\n");
-  lock_acquire(&inode->lock);
+  lock_acquire_re(&inode->lock);
   ASSERT (inode->deny_write_cnt > 0);
   ASSERT (inode->deny_write_cnt <= inode->open_cnt);
   inode->deny_write_cnt--;
-  lock_release(&inode->lock);
+  lock_release_re(&inode->lock);
 }
 
 /* Returns the length, in bytes, of INODE's data. */
@@ -515,8 +520,20 @@ off_t
 inode_length (struct inode *inode)
 {
   log_debug("!!!inode_length!!!\n");
-  lock_acquire(&inode->lock);
+  lock_acquire_re(&inode->lock);
   off_t tmp = inode->length;
-  lock_release(&inode->lock);
+  lock_release_re(&inode->lock);
   return tmp;
+}
+
+void
+inode_acquire(struct inode * i) {
+  ASSERT(i!=NULL);
+  lock_acquire_re(&i->lock);
+}
+
+void
+inode_release(struct inode * i) {
+  ASSERT(i!=NULL);
+  lock_release_re(&i->lock);
 }
