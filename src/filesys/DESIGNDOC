@@ -107,16 +107,35 @@ directory.
 >> only one of two simultaneous attempts to remove a single file
 >> should succeed, as should only one of two simultaneous attempts to
 >> create a file with the same name, and so on.
+We use the inode to synchronize data between directories for multiple
+threads. We acquire the lock before we check or manipulate data, which
+means before the lookup of names within the inode and release it after
+file is added/removed.
 
 >> B5: Does your implementation allow a directory to be removed if it
 >> is open by a process or if it is in use as a process's current
 >> working directory?  If so, what happens to that process's future
 >> file system operations?  If not, how do you prevent it?
+We allow the removal of current working directories. We use the inode
+support for this and mark the inode as removed. During the resolution
+of path we check whether the current working directory is still available
+on disk.
+Any relative path resolitions will fail and the syscalls will reresent
+the correct error state. However, absolute path lookups are still fine
 
 ---- RATIONALE ----
 
 >> B6: Explain why you chose to represent the current directory of a
 >> process the way you did.
+The current working directory of a process is just the struct file *
+(previous struct dir *) of the current directory. This is very beneficial
+for our needs. Each struct file * for a directory contains the stack
+til root of all folders such that a chdir "../.." is very easy to do.
+Requests like open "x" are also very easy, because we already have a
+pointer to the struct file so that we can call dir_lookup on it.
+
+Storing a pointer also prevents to re-parse the same string over and
+over again.
 
 			     BUFFER CACHE
 			     ============
