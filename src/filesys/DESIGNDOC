@@ -116,16 +116,35 @@ directory.
 >> only one of two simultaneous attempts to remove a single file
 >> should succeed, as should only one of two simultaneous attempts to
 >> create a file with the same name, and so on.
+We use the inode to synchronize data between directories for multiple
+threads. We acquire the lock before we check or manipulate data, which
+means before the lookup of names within the inode and release it after
+file is added/removed.
 
 >> B5: Does your implementation allow a directory to be removed if it
 >> is open by a process or if it is in use as a process's current
 >> working directory?  If so, what happens to that process's future
 >> file system operations?  If not, how do you prevent it?
+We allow the removal of current working directories. We use the inode
+support for this and mark the inode as removed. During the resolution
+of path we check whether the current working directory is still available
+on disk.
+Any relative path resolitions will fail and the syscalls will reresent
+the correct error state. However, absolute path lookups are still fine
 
 ---- RATIONALE ----
 
 >> B6: Explain why you chose to represent the current directory of a
 >> process the way you did.
+The current working directory of a process is just the struct file *
+(previous struct dir *) of the current directory. This is very beneficial
+for our needs. Each struct file * for a directory contains the stack
+til root of all folders such that a chdir "../.." is very easy to do.
+Requests like open "x" are also very easy, because we already have a
+pointer to the struct file so that we can call dir_lookup on it.
+
+Storing a pointer also prevents to re-parse the same string over and
+over again.
 
 			     BUFFER CACHE
 			     ============
@@ -140,24 +159,61 @@ directory.
 
 >> C2: Describe how your cache replacement algorithm chooses a cache
 >> block to evict.
+We perform a simple clock algorithm. We iterate over all cache positions.
+If another process holds a lock for a cache entry we skip it (lock_try_acquire).
+If a position is pinned or the reference count is not 0 (another form of pinning)
+we also skip the entry. If the dirty bit is set, schedule it to write to disk and
+clear bit. If accessed bit is set clear it. If the cache position is none of the
+above the entry is not used by any other thread and was unused for a long time
+so we choose it for replacement.
 
 >> C3: Describe your implementation of write-behind.
+Writes are only scheduled if we need the entry for replacement.
 
 >> C4: Describe your implementation of read-ahead.
+We schedule prefetching on reads because of non-prefetching, so someone wait for
+the data. We then schedule a new thread which will read zero bytes of data from
+the next sector, so the cache will schedule a new read but will mark it as a
+prefetching request. This way we do not cause a loop. Because the prefetching
+is run in another thread no thread has to wait on completion.
 
 ---- SYNCHRONIZATION ----
 
 >> C5: When one process is actively reading or writing data in a
 >> buffer cache block, how are other processes prevented from evicting
 >> that block?
+Reading and writing in cache with the corresponding methods is atomic.
+We therefore need to acquire a lock do prevent race conditions. A cache
+block may only be evicted if this lock is held, thus preventing eviction
+while it is being used.
 
 >> C6: During the eviction of a block from the cache, how are other
 >> processes prevented from attempting to access the block?
+Only blocks which are not dirty can be evicted, so all data is guaranteed to be written.
+The processes are not directly prevented from accessing the block. The block is
+marked as UNREADY by the eviction algorithm. All processes accessing the block
+will first acquire the lock of the block and check the UNREADY bit. If it is set,
+they will wait until the data is available (with a condition) and only then
+are allowed to read. At this point in time the eviction and reading of the fresh
+data is completed.
+
+
 
 ---- RATIONALE ----
 
 >> C7: Describe a file workload likely to benefit from buffer caching,
 >> and workloads likely to benefit from read-ahead and write-behind.
+Caching is benefitial for workloads which often access the same blocks over
+and over again. This could be shared memory or a process/group of processes which
+open/read/close the same set of files often e.g. a compiler and linker.
+
+Read-ahead is most beneficial, if large files are read from start to end.
+Log files for databases follow this exactly (as long as file fragmentation
+is not too high). Crash recovery from a write-ahead log would be a good case.
+
+Write-behind is most beneficial is many small write, which are non-critical,
+meaning they will not be flushed to disk immediately (pintos does not support
+flush anyway).
 
 			   SURVEY QUESTIONS
 			   ================
