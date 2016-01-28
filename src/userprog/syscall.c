@@ -444,6 +444,25 @@ syscall_handler (struct intr_frame *f)
                    syscall_munmap(mapid);
                    unpin_page(f->esp+4);
                    break;
+    case SYS_CHDIR:
+                   log_debug("SYS_CHDIR\n");
+                   file_name_uaddr = *((char**) uaddr_to_kaddr(f->esp+4, esp)); /* char pointer in usermode */
+                   s_l = validate_user_string(file_name_uaddr, esp);
+                   file_name = (char*) uaddr_to_kaddr(file_name_uaddr, esp); /* char pointer in kernel mode */
+                   f->eax = syscall_chdir(file_name);
+                   unpin_page(f->esp+4);
+                   unpin_buffer(f->esp+4, s_l);
+                   break;
+    case SYS_MKDIR:
+                   log_debug("SYS_MKDIR\n");
+                   file_name_uaddr = *((char**) uaddr_to_kaddr(f->esp+4, esp)); /* char pointer in usermode */
+                   s_l = validate_user_string(file_name_uaddr, esp);
+                   file_name = (char*) uaddr_to_kaddr(file_name_uaddr, esp); /* char pointer in kernel mode */
+                   f->eax = syscall_mkdir(file_name);
+                   unpin_page(f->esp+4);
+                   unpin_buffer(f->esp+4, s_l);
+                   break;
+
     default:
                    syscall_exit(-1);
                    break; /* Should not happen */ 
