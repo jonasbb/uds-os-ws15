@@ -181,6 +181,7 @@ inode_create (block_sector_t sector, off_t length, bool is_dir)
       if (free_map_allocate (1, &disk_inode->start))
         {
           in_cache_and_overwrite_block (sector, 0, disk_inode, sizeof(*disk_inode));
+
           zero_out_sector_data(disk_inode->start);
 
           if (sector == FREE_MAP_SECTOR) {
@@ -193,11 +194,11 @@ inode_create (block_sector_t sector, off_t length, bool is_dir)
               //
               // By allocating the file completely in front, this should be avoidable
 
-              printf("alloc start - %d\n", disk_inode->start);
+
               // assume at most 128 blocks are needed for the free map
               block_sector_t indirect_blk, data_start, tmp;
               ASSERT(free_map_allocate(1, &indirect_blk));
-              printf("indirect %d\n", indirect_blk);
+
               // link indirect in start block
               in_cache_and_overwrite_block(disk_inode->start,
                                            0, // first indirect block
@@ -210,7 +211,7 @@ inode_create (block_sector_t sector, off_t length, bool is_dir)
               int i;
               for (i = 0; i < blocks_needed; i++) {
                   tmp = data_start + i;
-                  printf("tmp %d\n", tmp);
+              
                   in_cache_and_overwrite_block(indirect_blk,
                                                i * sizeof(tmp),
                                                &tmp,
