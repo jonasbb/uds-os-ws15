@@ -282,11 +282,6 @@ inode_reopen (struct inode *inode)
 {
   log_debug("!!!inode_reopen!!!\n");
   if (inode != NULL) {
-    if (inode == 0xc0040568) {
-      printf("inode lock: %p\n", &inode->lock);
-      printf("%d\n", lock_try_acquire_re(&inode->lock));
-
-    }
     lock_acquire_re(&inode->lock);
     inode->open_cnt++;
     lock_release_re(&inode->lock);

@@ -70,22 +70,21 @@ dir_open_root (void)
 struct file *
 dir_reopen (struct file *dir)
 {
-     printf("REA00, ptr: %p!\n", dir->inode);
   struct inode *i = inode_reopen (dir->inode);
   struct file *tmp = dir_open (i);
-     printf("REA10!\n");
+
   ASSERT(tmp != NULL);
   if (!file_isroot(dir)) {
-       printf("REA20!\n");
+
     // NOT ROOT YET
     tmp->parent = dir_reopen(dir->parent);
-       printf("REA30!\n");
+
   } else {
     // dir == ROOT_NODE
-       printf("REA40!\n");
+
     tmp->parent = tmp;
   }
-     printf("REA50!\n");
+
   return tmp;
 }
 
