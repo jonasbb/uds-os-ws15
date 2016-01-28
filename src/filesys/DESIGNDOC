@@ -31,11 +31,17 @@ Lukas Krämer <lkraemer@mmci.uni-saarland.de>
 
 >> A2: What is the maximum size of a file supported by your inode
 >> structure?  Show your work.
+The maximum size of a file supported by our inode structure is 8mb.
+Our inodes have one pointer to a double indirect block. So the size is
+calculated as 128 byte *128 byte * 512 byte = 8388608 byte = 8mb.
 
 ---- SYNCHRONIZATION ----
 
 >> A3: Explain how your code avoids a race if two processes attempt to
 >> extend a file at the same time.
+Our inodes have a lock which must be hold to modify any inode struct member.
+This includes  writing to a inode and the internal linking blocks.
+So a extension of a file is only possible for one process at one time.
 
 >> A4: Suppose processes A and B both have file F open, both
 >> positioned at end-of-file.  If A reads and B writes F at the same
@@ -43,6 +49,10 @@ Lukas Krämer <lkraemer@mmci.uni-saarland.de>
 >> may not read data other than what B writes, e.g. if B writes
 >> nonzero data, A is not allowed to see all zeros.  Explain how your
 >> code avoids this race.
+The growing of a file is atomic. The file length is updated after the write.
+So a normal read on this file can read all the already written bytes (if
+file length already updated) or nothing (file length not updated, read
+cannot read more than file length).
 
 >> A5: Explain how your synchronization design provides "fairness".
 >> File access is "fair" if readers cannot indefinitely block writers
@@ -50,6 +60,10 @@ Lukas Krämer <lkraemer@mmci.uni-saarland.de>
 >> prevent forever another process from writing the file, and many
 >> processes writing to a file cannot prevent another process forever
 >> from reading the file.
+The provide "fairness" because the pintos semaphores implement a FiFo logic
+while scheduling waiters. So the pintos locks are also "fair". The second
+point is that there is no diffrence between readers and writers. So everyone
+is guaranteed to be able to write or read a file.
 
 ---- RATIONALE ----
 
@@ -58,6 +72,10 @@ Lukas Krämer <lkraemer@mmci.uni-saarland.de>
 >> indirect blocks?  If not, why did you choose an alternative inode
 >> structure, and what advantages and disadvantages does your
 >> structure have, compared to a multilevel index?
+We chose a single doubly indirect block for every inode. It has the
+advantage that it supports exactly a file_size of 8mb which is mandatory.
+It also saves us from the case distinctions which level to use with the
+current size of the file.
 
 			    SUBDIRECTORIES
 			    ==============
