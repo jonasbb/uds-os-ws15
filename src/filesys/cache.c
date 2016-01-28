@@ -498,8 +498,18 @@ void in_cache_and_overwrite_block(block_sector_t  sector,
                               size_t          ofs,
                               void           *data,
                               size_t          length) {
-    ASSERT(sector < block_size(fs_device));
+    if (!(ofs + length <= BLOCK_SECTOR_SIZE)) {
+        printf("ofs %d, length %d, BLOCK_SECTOR_SIZE %d\n", ofs, length, BLOCK_SECTOR_SIZE);
+    }
     ASSERT(ofs + length <= BLOCK_SECTOR_SIZE);
+    if (!(sector < block_size(fs_device))) {
+        printf("sector %d, block_size %d\n", sector, block_size(fs_device));
+    }
+    ASSERT(sector < block_size(fs_device));
+    if (print_debug) {
+        log_debug("Read from sector %d\n    ofs: %d - length: %d\n", sector, ofs, length);
+    }
+
     if (print_debug) {
         log_debug("Write to sector %d\n    ofs: %d - length: %d\n", sector, ofs, length);
     }
@@ -531,7 +541,13 @@ void in_cache_and_read(block_sector_t  sector,
                        size_t          ofs,
                        void           *data,
                        size_t          length) {
+    if (!(ofs + length <= BLOCK_SECTOR_SIZE)) {
+        printf("ofs %d, length %d, BLOCK_SECTOR_SIZE %d\n", ofs, length, BLOCK_SECTOR_SIZE);
+    }
     ASSERT(ofs + length <= BLOCK_SECTOR_SIZE);
+    if (!(sector < block_size(fs_device))) {
+        printf("sector %d, block_size %d\n", sector, block_size(fs_device));
+    }
     ASSERT(sector < block_size(fs_device));
     if (print_debug) {
         log_debug("Read from sector %d\n    ofs: %d - length: %d\n", sector, ofs, length);
@@ -560,7 +576,7 @@ void in_cache_and_read(block_sector_t  sector,
 static
 void set_accessed (cache_t idx, bool accessed) {
     // valid range
-    ASSERT(idx <= CACHE_SIZE);
+    ASSERT(idx < CACHE_SIZE);
     lock_acquire_re(&block_meta_lock);
     if (accessed) {
         blocks_meta[idx].state |= ACCESSED;
@@ -576,7 +592,7 @@ void set_accessed (cache_t idx, bool accessed) {
 static
 void set_dirty (cache_t idx, bool dirty) {
     // valid range
-    ASSERT(idx <= CACHE_SIZE);
+    ASSERT(idx < CACHE_SIZE);
     lock_acquire_re(&block_meta_lock);
     if (dirty) {
         blocks_meta[idx].state |= DIRTY;
@@ -592,7 +608,7 @@ void set_dirty (cache_t idx, bool dirty) {
 static
 void set_unready (cache_t idx, bool unready) {
     // valid range
-    ASSERT(idx <= CACHE_SIZE);
+    ASSERT(idx < CACHE_SIZE);
     lock_acquire_re(&block_meta_lock);
     if (unready) {
         blocks_meta[idx].state |= UNREADY;
@@ -608,7 +624,7 @@ void set_unready (cache_t idx, bool unready) {
 static
 void set_pin (cache_t idx, bool pin) {
     // valid range
-    ASSERT(idx <= CACHE_SIZE);
+    ASSERT(idx < CACHE_SIZE);
     lock_acquire_re(&block_meta_lock);
     if (pin) {
         blocks_meta[idx].state |= PIN;
@@ -636,6 +652,6 @@ void unpin (cache_t idx) {
 static
 void *idx_to_ptr(cache_t idx) {
     // valid range
-    ASSERT(idx <= CACHE_SIZE);
+    ASSERT(idx < CACHE_SIZE);
     return blocks[idx];
 }
