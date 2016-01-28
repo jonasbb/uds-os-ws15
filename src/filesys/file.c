@@ -213,7 +213,7 @@ bool
 file_deconstruct_path (const char   *path,
                        struct file **parent,
                        struct file **file,
-                       char        **filename) {
+                       char        *filename[NAME_MAX + 1]) {
   char s[strlen(path) + 1];
   memcpy(s, path, strlen(path) + 1);
 
@@ -249,12 +249,17 @@ file_deconstruct_path (const char   *path,
     }
 
     if (!dir_lookup(dir, token, &inode)) {
-      return false;
+      break;
     }
 
     dir = dir_open_with_parent(inode, dir);
   }
 
+  if (strtok_r(NULL, "/", &save_ptr) != NULL) {
+    // not all tokens processed, there is an error
+    dir_close(dir);
+    return false;
+  }
 
   if (file) {
     if (dir_lookup(dir, token, &inode)) {
@@ -262,6 +267,7 @@ file_deconstruct_path (const char   *path,
     }
   }
 
+  ASSERT(file_isdir(dir));
   // set return values
   if (parent) {
     *parent = dir;

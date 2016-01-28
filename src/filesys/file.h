@@ -2,6 +2,7 @@
 #define FILESYS_FILE_H
 
 #include "filesys/off_t.h"
+#include "filesys/directory.h"
 #include <stdbool.h>
 
 struct inode;
@@ -33,6 +34,6 @@ bool file_isroot (struct file *);
 bool file_deconstruct_path (const char   *path,
                             struct file **parent,
                             struct file **file,
-                            char        **filename);
+                            char        *filename[NAME_MAX + 1]);
 
 #endif /* filesys/file.h */

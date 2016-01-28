@@ -76,15 +76,11 @@ syscall_wait (pid_t pid) {
 }
 
 static bool 
-syscall_create (const char *file, unsigned initial_size) {
-  if (strlen(file)>NAME_MAX) return false;
-
-  bool res = filesys_create(file, initial_size);
-
-  return res;
+syscall_create (const char *path, unsigned initial_size) {
+  return filesys_create(path, initial_size, false);
 }
 
-static bool 
+static bool
 syscall_remove (const char *file) {
   if (strlen(file)>NAME_MAX) return false;
 
@@ -255,9 +251,8 @@ syscall_chdir(const char* file_name) {
 }
 
 static bool
-syscall_mkdir(const char* file_name) {
-  //TODO
-  return false;
+syscall_mkdir(const char* filename) {
+  return filesys_create(filename, 0, true);
 }
 
 static bool

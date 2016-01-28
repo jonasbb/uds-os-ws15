@@ -35,6 +35,7 @@ filesys_init (bool format)
 void
 filesys_done (void) 
 {
+  // TODO flush cache
   free_map_close ();
 }
 
@@ -43,18 +44,24 @@ filesys_done (void)
    Fails if a file named NAME already exists,
    or if internal memory allocation fails. */
 bool
-filesys_create (const char *name, off_t initial_size) 
+filesys_create (const char *path,
+                off_t       initial_size,
+                bool        isdir)
 {
+  struct file *parent = NULL;
+  char dirname_ [NAME_MAX + 1];
+  char *dirname = (char*) dirname_;
+  bool success = false;
+  if (!file_deconstruct_path(path, &parent, NULL, &dirname) || parent == NULL) {
+    return false;
+  }
   block_sector_t inode_sector = 0;
-  struct file *dir = dir_open_root ();
-  bool success = (dir != NULL
-                  && free_map_allocate (1, &inode_sector)
-                  && inode_create (inode_sector, initial_size,false)
-                  && dir_add (dir, name, inode_sector));
-  if (!success && inode_sector != 0) 
+  success = (free_map_allocate (1, &inode_sector)
+                  && inode_create (inode_sector, initial_size, isdir)
+                  && dir_add (parent, dirname, inode_sector));
+  if (!success && inode_sector != 0)
     free_map_release (inode_sector, 1);
-  dir_close (dir);
-  
+  dir_close (parent);
   return success;
 }
 
