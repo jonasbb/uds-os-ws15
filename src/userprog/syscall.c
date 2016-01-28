@@ -239,7 +239,18 @@ syscall_mmap (int fd, void *vaddr) {
 
 static bool
 syscall_chdir(const char* file_name) {
-  //TODO
+  struct file* file;
+  if(!file_deconstruct_path(file_name, NULL,&file, NULL)) {
+    return false;
+  }
+  if(file == NULL) {
+    return false;
+  }
+  if(file_isdir(file)) {
+    dir_close(thread_current()->current_work_dir);
+    thread_current()->current_work_dir = file;
+    return true;
+  }
   return false;
 }
 
