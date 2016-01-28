@@ -94,6 +94,7 @@ filesys_remove (const char *path)
   if (!file_deconstruct_path(path, &dir, &f, &fname)) {
     return false;
   }
+
   bool success = !file_isroot(f) && dir_remove (dir, fname);
   dir_close (dir);
   if (file_isdir(f)) {

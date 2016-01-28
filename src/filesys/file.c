@@ -220,11 +220,15 @@ file_deconstruct_path (const char   *path,
   // token_next contains always the last processed part of the string,
   // which may be the non-existant new filename
   // so only token will be checked to go through the directories
-
+  if (strlen(path)==0) {
+    return false;
+  }
   struct file *dir, *f = NULL;
   struct inode *inode;
   if(s[0] == '/' || !thread_current()->current_work_dir) {
+
     dir = dir_open_root();
+
   } else {
     if (inode_get_removed(thread_current()->current_work_dir->inode)) {
       return false;
@@ -294,7 +298,12 @@ after_loop:
     }
   }
   if (filename) {
-    memcpy(*filename, token, strlen(token) + 1);
+    if (token) {
+      memcpy(*filename, token, strlen(token) + 1);
+    } else {
+     filename = NULL;
+    }
+
   }
   return true;
 done:
