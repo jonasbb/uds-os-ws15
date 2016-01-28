@@ -277,9 +277,11 @@ syscall_inumber(int fd) {
 }
 
 static bool
-syscall_readdir(int fd, const char * file_name) {
-  //TODO
-  return false;
+syscall_readdir(int fd, char *file_name) {
+  struct file *f = get_fdlist(thread_current()->pid, fd);
+  if (!f) // file does not exist
+    return false;
+  return dir_readdir(f, file_name);
 }
 
 
@@ -510,17 +512,17 @@ syscall_handler (struct intr_frame *f)
                    unpin_buffer(f->esp+4, s_l);
                    break;
     case SYS_READDIR:
+                   size = READDIR_MAX_LEN + 1;
                    log_debug("SYS_READDIR\n");
                    fd = *((int*) uaddr_to_kaddr(f->esp+4, esp));
                    file_name_uaddr = *((char**) uaddr_to_kaddr(f->esp+8, esp)); /* char pointer in usermode */
-                   s_l = validate_user_string(file_name_uaddr, esp);
+                   validate_user_buffer_write(file_name_uaddr, size, esp, true); /* validates user input */
                    file_name = (char*) uaddr_to_kaddr(file_name_uaddr, esp); /* char pointer in kernel mode */
                    f->eax = syscall_readdir(fd, file_name);
                    // unpinning
                    unpin_page(f->esp+4);
-                   unpin_page(f->esp+8);
+                   unpin_buffer(file_name_uaddr, size);
                    break;    /* Read from a file. */
-
     case SYS_ISDIR:
                    log_debug("SYS_ISDIR\n");
                    fd = *((int*) uaddr_to_kaddr(f->esp+4, esp));
