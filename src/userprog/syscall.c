@@ -81,15 +81,13 @@ syscall_create (const char *path, unsigned initial_size) {
 }
 
 static bool
-syscall_remove (const char *file) {
-  return filesys_remove(file);
+syscall_remove (const char *path) {
+  return filesys_remove(path);
 }
 
 static int
 syscall_open (const char *file_name) {
-
   struct file* file = filesys_open(file_name);
-
   if (file  == NULL)
     return -1;
   return insert_fdlist(thread_current()->pid, file);
@@ -177,7 +175,11 @@ syscall_close (int fd) {
     return;
   delete_fdlist(thread_current()->pid, fd);
 
-  file_close(f);
+  if (file_isdir(f)) {
+    dir_close(f);
+  } else {
+    file_close(f);
+  }
 }
 
 static void

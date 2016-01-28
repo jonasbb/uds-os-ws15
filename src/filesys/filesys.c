@@ -85,11 +85,22 @@ filesys_open (const char *name)
    Fails if no file named NAME exists,
    or if an internal memory allocation fails. */
 bool
-filesys_remove (const char *name) 
+filesys_remove (const char *path)
 {
-  struct file *dir = dir_open_root ();
-  bool success = dir != NULL && dir_remove (dir, name);
+  struct file *dir, *f;
+  char fname_[NAME_MAX + 1];
+  char *fname = fname_;
+
+  if (!file_deconstruct_path(path, &dir, &f, &fname)) {
+    return false;
+  }
+  bool success = !file_isroot(f) && dir_remove (dir, fname);
   dir_close (dir); 
+  if (file_isdir(f)) {
+    file_close(f);
+  } else {
+    dir_close(f);
+  }
   return success;
 }
 
