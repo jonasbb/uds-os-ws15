@@ -1,22 +1,18 @@
 #include "filesys/file.h"
 #include <debug.h>
+#include <string.h>
+#include "filesys/directory.h"
 #include "filesys/inode.h"
 #include "filesys/filesys.h"
+#include "filesys/file-struct.h"
 #include "threads/malloc.h"
-
-/* An open file. */
-struct file 
-  {
-    struct inode *inode;        /* File's inode. */
-    off_t pos;                  /* Current position. */
-    bool deny_write;            /* Has file_deny_write() been called? */
-  };
+#include "threads/thread.h"
 
 /* Opens a file for the given INODE, of which it takes ownership,
    and returns the new file.  Returns a null pointer if an
    allocation fails or if INODE is null. */
 struct file *
-file_open (struct inode *inode) 
+file_open (struct inode *inode)
 {
 
   struct file *file = calloc (1, sizeof *file);
@@ -195,12 +191,92 @@ file_tell (struct file *file)
   return res;
 }
 
-bool file_isdir(struct file *file) {
-  ASSERT(file != NULL);
-  return inode_isdir(file->inode);
-}
-
 int file_get_inumber(struct file *file) {
   ASSERT(file != NULL);
   return inode_get_inumber(file->inode);
+
+bool
+file_isdir (struct file *file) {
+  ASSERT(file != NULL);
+  return file->parent != NULL;
+}
+
+bool
+file_isroot (struct file *file) {
+  ASSERT(file != NULL);
+  return file->parent == file;
+}
+
+
+bool
+file_deconstruct_path (const char   *path,
+                       struct file **parent,
+                       struct file **file,
+                       char        **filename) {
+  char s[strlen(path) + 1];
+  memcpy(s, path, strlen(path) + 1);
+
+  char *save_ptr, *token, *token_next;
+  // token_next contains always the last processed part of the string,
+  // which may be the non-existant new filename
+  // so only token will be checked to go through the directories
+
+  struct file *dir, *f = NULL;
+  struct inode *inode;
+  if(s[0] == '/' || !thread_current()->current_work_dir) {
+    dir = dir_open_root();
+  } else {
+    dir = dir_reopen(thread_current()->current_work_dir);
+  }
+
+  // parse string
+  token_next = strtok_r(s, "/", &save_ptr);
+  if (!token_next) {
+    return false;
+  }
+
+  while(token_next != NULL) {
+    token = token_next;
+    token_next = strtok_r(NULL, "/", &save_ptr);
+
+    if (strcmp(token, ".") == 0) {
+      continue;
+    }
+    if (strcmp(token, "..") == 0) {
+      dir = dir_pop(dir);
+      continue;
+    }
+
+    if (!dir_lookup(dir, token, &inode)) {
+      return false;
+    }
+
+    dir = dir_open_with_parent(inode, dir);
+  }
+
+
+  if (file) {
+    if (dir_lookup(dir, token, &inode)) {
+      f = file_open(inode);
+    }
+  }
+
+  // set return values
+  if (parent) {
+    *parent = dir;
+  } else {
+    dir_close(dir);
+  }
+  if (file) {
+    *file = f;
+  } else {
+    if (f) {
+      file_close(f);
+    }
+  }
+  if (filename) {
+    memcpy(*filename, token, strlen(token) + 1);
+  }
+
+  return true;
 }
