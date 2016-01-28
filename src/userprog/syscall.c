@@ -82,26 +82,20 @@ syscall_create (const char *path, unsigned initial_size) {
 
 static bool
 syscall_remove (const char *file) {
-  if (strlen(file)>NAME_MAX) return false;
-
-  bool res = filesys_remove(file);
-
-  return res;
+  return filesys_remove(file);
 }
 
-static int 
-syscall_open (const char *file) {
-  if (strlen(file)>NAME_MAX) return false;
+static int
+syscall_open (const char *file_name) {
 
-  struct file *f = filesys_open(file);
+  struct file* file = filesys_open(file_name);
 
-  if (f  == NULL)
+  if (file  == NULL)
     return -1;
-  int fd = insert_fdlist(thread_current()->pid, f);
-  return fd;
+  return insert_fdlist(thread_current()->pid, file);
 }
 
-static int 
+static int
 syscall_filesize (int fd) {
   struct file *f = get_fdlist(thread_current()->pid, fd);
   if (!f) // file does not exist
@@ -112,7 +106,7 @@ syscall_filesize (int fd) {
   return res;
 }
 
-static int 
+static int
 syscall_read (int fd, void *buffer, unsigned size) {
   if (fd == 0)
   {
@@ -127,7 +121,8 @@ syscall_read (int fd, void *buffer, unsigned size) {
     struct file *f = get_fdlist(thread_current()->pid, fd);
     if (!f) // file does not exist
       return -1;
-
+    if (file_isdir(f))
+      return -1;
     int res = file_read(f, buffer, size);
     
     return res;
@@ -146,7 +141,8 @@ syscall_write (int fd, const void *buffer, unsigned size) {
     struct file *f = get_fdlist(thread_current()->pid, fd);
     if (!f) // file does not exist
       return 0;
-
+    if (file_isdir(f))
+      return -1;
     int res = file_write(f, buffer, size);
 
     return res;
