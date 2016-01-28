@@ -506,9 +506,6 @@ void in_cache_and_overwrite_block(block_sector_t  sector,
         printf("sector %d, block_size %d\n", sector, block_size(fs_device));
     }
     ASSERT(sector < block_size(fs_device));
-    if (print_debug) {
-        log_debug("Read from sector %d\n    ofs: %d - length: %d\n", sector, ofs, length);
-    }
 
     if (print_debug) {
         log_debug("Write to sector %d\n    ofs: %d - length: %d\n", sector, ofs, length);
