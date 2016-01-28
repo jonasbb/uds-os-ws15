@@ -194,6 +194,7 @@ file_tell (struct file *file)
 int file_get_inumber(struct file *file) {
   ASSERT(file != NULL);
   return inode_get_inumber(file->inode);
+}
 
 bool
 file_isdir (struct file *file) {
