@@ -299,6 +299,17 @@ inode_get_inumber (struct inode *inode)
   return tmp;
 }
 
+/* Returns INODE's inode number. */
+bool
+inode_isdir (struct inode *inode)
+{
+  log_debug("!!!inode_isdir!!!\n");
+  lock_acquire(&inode->lock);
+  bool tmp = inode->is_dir;
+  lock_release(&inode->lock);
+  return tmp;
+}
+
 /* Closes INODE and writes it to disk.
    If this was the last reference to INODE, frees its memory.
    If INODE was also a removed inode, frees its blocks. */

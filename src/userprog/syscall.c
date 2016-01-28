@@ -6,6 +6,7 @@
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 #include "filesys/directory.h"
+#include "filesys/inode.h"
 #include "devices/shutdown.h"
 #include "devices/input.h"
 #include "threads/interrupt.h"
@@ -236,6 +237,41 @@ syscall_mmap (int fd, void *vaddr) {
   return mapid;
 }
 
+static bool
+syscall_chdir(const char* file_name) {
+  //TODO
+  return false;
+}
+
+static bool
+syscall_mkdir(const char* file_name) {
+  //TODO
+  return false;
+}
+
+static bool
+syscall_isdir(int fd) {
+  struct file *f = get_fdlist(thread_current()->pid, fd);
+  if (!f) // file does not exist
+    return false;
+  return file_isdir(f);
+}
+
+static int
+syscall_inumber(int fd) {
+  struct file *f = get_fdlist(thread_current()->pid, fd);
+  if (!f) // file does not exist
+    return -1;
+  return file_get_inumber(f);
+}
+
+static bool
+syscall_readdir(int fd, const char * file_name) {
+  //TODO
+  return false;
+}
+
+
 /*
  * Validates that every byte of a user provided char* is
  * inside the user's mapped memory.
@@ -461,6 +497,30 @@ syscall_handler (struct intr_frame *f)
                    f->eax = syscall_mkdir(file_name);
                    unpin_page(f->esp+4);
                    unpin_buffer(f->esp+4, s_l);
+                   break;
+    case SYS_READDIR:
+                   log_debug("SYS_READDIR\n");
+                   fd = *((int*) uaddr_to_kaddr(f->esp+4, esp));
+                   file_name_uaddr = *((char**) uaddr_to_kaddr(f->esp+8, esp)); /* char pointer in usermode */
+                   s_l = validate_user_string(file_name_uaddr, esp);
+                   file_name = (char*) uaddr_to_kaddr(file_name_uaddr, esp); /* char pointer in kernel mode */
+                   f->eax = syscall_readdir(fd, file_name);
+                   // unpinning
+                   unpin_page(f->esp+4);
+                   unpin_page(f->esp+8);
+                   break;    /* Read from a file. */
+
+    case SYS_ISDIR:
+                   log_debug("SYS_ISDIR\n");
+                   fd = *((int*) uaddr_to_kaddr(f->esp+4, esp));
+                   f->eax = syscall_isdir(fd);
+                   unpin_page(f->esp+4);
+                   break;
+    case SYS_INUMBER:
+                   log_debug("SYS_INUMBER\n");
+                   fd = *((int*) uaddr_to_kaddr(f->esp+4, esp));
+                   f->eax = syscall_inumber(fd);
+                   unpin_page(f->esp+4);
                    break;
 
     default:

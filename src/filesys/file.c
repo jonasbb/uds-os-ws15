@@ -194,3 +194,13 @@ file_tell (struct file *file)
 
   return res;
 }
+
+bool file_isdir(struct file *file) {
+  ASSERT(file != NULL);
+  return inode_isdir(file->inode);
+}
+
+int file_get_inumber(struct file *file) {
+  ASSERT(file != NULL);
+  return inode_get_inumber(file->inode);
+}
