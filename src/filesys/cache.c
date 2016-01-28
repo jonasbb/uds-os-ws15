@@ -229,11 +229,12 @@ cache_t sched_read_do(block_sector_t sector,
     if ((res = sched_contains_req(sector, true)) == NOT_IN_CACHE) {
         res = sched_insert(sector, NOT_IN_CACHE);
     }
-    if (!isprefetch && sched_contains_req(sector+1, true) == NOT_IN_CACHE
+    // TODO implement as extra thread
+    /*if (!isprefetch && sched_contains_req(sector+1, true) == NOT_IN_CACHE
             && sector < block_size(fs_device)) // check for out of bound accesses
             {
         sched_insert(sector+1, NOT_IN_CACHE);
-    }
+    }*/
     lock_release_re(&sched_lock);
     return res;
 }
